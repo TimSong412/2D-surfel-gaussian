@@ -112,6 +112,64 @@ __device__ float3 computeCov2D(const float3 &mean, float focal_x, float focal_y,
 	return {float(cov[0][0]), float(cov[0][1]), float(cov[1][1])};
 }
 
+
+// compute the H matrix 3x3 as 
+// return: s_u*t_u (3 numbers), s_v*t_v (3 numbers)
+__device__ void computeSTuv(const glm::vec3 scale, float mod, const glm::vec4 rot, float *STuv)
+{
+	// Normalize quaternion to get valid rotation
+	glm::vec4 q = rot; // / glm::length(rot);
+	float r = q.x;
+	float x = q.y;
+	float y = q.z;
+	float z = q.w;
+
+	// Compute rotation matrix from quaternion
+	glm::mat3 R = glm::mat3(
+		1.f - 2.f * (y * y + z * z), 2.f * (x * y - r * z), 2.f * (x * z + r * y),
+		2.f * (x * y + r * z), 1.f - 2.f * (x * x + z * z), 2.f * (y * z - r * x),
+		2.f * (x * z - r * y), 2.f * (y * z + r * x), 1.f - 2.f * (x * x + y * y));
+	
+	// Tu
+	STuv[0] = scale.x*scale.x * R[0][0];
+	STuv[1] = scale.x*scale.x * R[1][0];
+	STuv[2] = scale.x*scale.x * R[2][0];
+
+	// Tv
+	STuv[3] = scale.y*scale.y * R[0][1];
+	STuv[4] = scale.y*scale.y * R[1][1];
+	STuv[5] = scale.y*scale.y * R[2][1];
+
+}
+
+// compute the partial transformation matrix A
+__device__ void computeA(float *STuv, float3 p_k, const float* view_matrix, glm::mat3 &A)
+{
+	// r1s1: the first row of view matrix times [STuv[0], STuv[1], STuv[2]]
+	float r1s1 = view_matrix[0]*STuv[0] + view_matrix[4]*STuv[1] + view_matrix[8]*STuv[2];
+	float r1s2 = view_matrix[0]*STuv[3] + view_matrix[4]*STuv[4] + view_matrix[8]*STuv[5];
+	float r2s1 = view_matrix[1]*STuv[0] + view_matrix[5]*STuv[1] + view_matrix[9]*STuv[2];
+	float r2s2 = view_matrix[1]*STuv[3] + view_matrix[5]*STuv[4] + view_matrix[9]*STuv[5];
+	float r3s1 = view_matrix[2]*STuv[0] + view_matrix[6]*STuv[1] + view_matrix[10]*STuv[2];
+	float r3s2 = view_matrix[2]*STuv[3] + view_matrix[6]*STuv[4] + view_matrix[10]*STuv[5];
+
+	// r1p_t1: the first row of view matrix times p_k plus the translation
+	float r1p_t1 = view_matrix[0]*p_k.x + view_matrix[4]*p_k.y + view_matrix[8]*p_k.z + view_matrix[12];
+	float r2p_t2 = view_matrix[1]*p_k.x + view_matrix[5]*p_k.y + view_matrix[9]*p_k.z + view_matrix[13];
+	float r3p_t3 = view_matrix[2]*p_k.x + view_matrix[6]*p_k.y + view_matrix[10]*p_k.z + view_matrix[14];
+
+	A[0][0] = r1s1;
+	A[0][1] = r1s2;
+	A[0][2] = r1p_t1;
+	A[1][0] = r2s1;
+	A[1][1] = r2s2;
+	A[1][2] = r2p_t2;
+	A[2][0] = r3s1;
+	A[2][1] = r3s2;
+	A[2][2] = r3p_t3;
+
+}
+
 // Forward method for converting scale and rotation properties of each
 // Gaussian to a 3D covariance matrix in world space. Also takes care
 // of quaternion normalization.
@@ -129,6 +187,8 @@ __device__ void computeCov3D(const glm::vec3 scale, float mod, const glm::vec4 r
 	float x = q.y;
 	float y = q.z;
 	float z = q.w;
+
+	glm::mat3 test = glm::mat3(1, 2, 3, 4, 5, 6, 7, 8, 9);
 
 	// Compute rotation matrix from quaternion
 	glm::mat3 R = glm::mat3(
@@ -172,6 +232,8 @@ __global__ void preprocessCUDA(int P, int D, int M,
 							   float2 *points_xy_image,
 							   float *depths,
 							   float *cov3Ds,
+							   float *STuvs,
+							   float *As,
 							   float *rgb,
 							   float4 *conic_opacity,
 							   const dim3 grid,
@@ -210,6 +272,23 @@ __global__ void preprocessCUDA(int P, int D, int M,
 		computeCov3D(scales[idx], scale_modifier, rotations[idx], cov3Ds + idx * 6);
 		cov3D = cov3Ds + idx * 6;
 	}
+
+	// Compute STuv
+	computeSTuv(scales[idx], scale_modifier, rotations[idx], STuvs + idx * 6);
+	// Compute A
+	glm::mat3 A;
+	computeA(STuvs + idx * 6, p_view, viewmatrix, A);
+	// flat A into As
+	As[idx * 9 + 0] = A[0][0];
+	As[idx * 9 + 1] = A[0][1];
+	As[idx * 9 + 2] = A[0][2];
+	As[idx * 9 + 3] = A[1][0];
+	As[idx * 9 + 4] = A[1][1];
+	As[idx * 9 + 5] = A[1][2];
+	As[idx * 9 + 6] = A[2][0];
+	As[idx * 9 + 7] = A[2][1];
+	As[idx * 9 + 8] = A[2][2];
+
 
 	// Compute 2D screen-space covariance matrix
 	float3 cov = computeCov2D(p_orig, focal_x, focal_y, tan_fovx, tan_fovy, cov3D, viewmatrix);
@@ -429,6 +508,8 @@ void FORWARD::preprocess(int P, int D, int M,
 						 float2 *means2D,
 						 float *depths,
 						 float *cov3Ds,
+						 float *STuvs,
+						 float *As,
 						 float *rgb,
 						 float4 *conic_opacity,
 						 const dim3 grid,
@@ -456,6 +537,8 @@ void FORWARD::preprocess(int P, int D, int M,
 		means2D,
 		depths,
 		cov3Ds,
+		STuvs,
+		As,
 		rgb,
 		conic_opacity,
 		grid,
