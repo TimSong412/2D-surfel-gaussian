@@ -88,6 +88,7 @@ __global__ void duplicateWithKeys(
 		uint32_t off = (idx == 0) ? 0 : offsets[idx - 1];
 		uint2 rect_min, rect_max;
 
+		//rect: tile index bounding box
 		getRect(points_xy[idx], radii[idx], rect_min, rect_max, grid);
 
 		// For each tile that the bounding rect overlaps, emit a
@@ -167,8 +168,8 @@ CudaRasterizer::GeometryState CudaRasterizer::GeometryState::fromChunk(char *&ch
 	obtain(chunk, geom.scanning_space, geom.scan_size, 128);
 	obtain(chunk, geom.point_offsets, P, 128);
 
-	obtain(chunk, geom.STuv, P*6, 128);
-	obtain(chunk, geom.A, P*9, 128);
+	obtain(chunk, geom.STuv, P * 6, 128);
+	obtain(chunk, geom.A, P * 9, 128);
 	return geom;
 }
 
@@ -303,7 +304,7 @@ int CudaRasterizer::Rasterizer::forward(
 		tile_grid)
 		CHECK_CUDA(, debug)
 
-			int bit = getHigherMsb(tile_grid.x * tile_grid.y);
+	int bit = getHigherMsb(tile_grid.x * tile_grid.y);
 
 	// Sort complete list of (duplicated) Gaussian indices by keys
 	CHECK_CUDA(cub::DeviceRadixSort::SortPairs(
@@ -331,10 +332,12 @@ int CudaRasterizer::Rasterizer::forward(
 				   imgState.ranges,
 				   binningState.point_list,
 				   width, height,
+				   focal_x, focal_y,
 				   geomState.means2D,
 				   feature_ptr,
 				   geomState.depths,
 				   geomState.conic_opacity,
+				   geomState.A,
 				   out_alpha,
 				   imgState.n_contrib,
 				   background,

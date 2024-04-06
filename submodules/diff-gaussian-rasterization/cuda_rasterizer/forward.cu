@@ -342,10 +342,13 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const uint2 *__restrict__ ranges,
 		const uint32_t *__restrict__ point_list,
 		int W, int H,
+		const float focal_x,
+		const float focal_y,
 		const float2 *__restrict__ points_xy_image,
 		const float *__restrict__ features,
 		const float *__restrict__ depths,
 		const float4 *__restrict__ conic_opacity,
+		const float *__restrict__ A,
 		float *__restrict__ out_alpha,
 		uint32_t *__restrict__ n_contrib,
 		const float *__restrict__ bg_color,
@@ -361,6 +364,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	uint32_t pix_id = W * pix.y + pix.x;
 	float2 pixf = {(float)pix.x, (float)pix.y};
 
+	// Convert pixel to NDC
+	float2 pix_cam = {(pixf.x - (W - 1) * 0.5f) / focal_x, (pixf.y - (H - 1) * 0.5f) / focal_y};
+
 	// Check if this thread is associated with a valid pixel or outside.
 	bool inside = pix.x < W && pix.y < H;
 	// Done threads can help with fetching, but don't rasterize
@@ -375,6 +381,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	__shared__ int collected_id[BLOCK_SIZE];
 	__shared__ float2 collected_xy[BLOCK_SIZE];
 	__shared__ float4 collected_conic_opacity[BLOCK_SIZE];
+	__shared__ float collected_A[BLOCK_SIZE * 9];
 
 	// Initialize helper variables
 	float T = 1.0f;
@@ -387,6 +394,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
+		// every thread load one gaussian, total #threads gaussians as one batch
 		// End if entire block votes that it is done rasterizing
 		int num_done = __syncthreads_count(done);
 		if (num_done == BLOCK_SIZE)
@@ -400,10 +408,12 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			collected_id[block.thread_rank()] = coll_id;
 			collected_xy[block.thread_rank()] = points_xy_image[coll_id];
 			collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
+			for (int j = 0; j < 9; j++)
+				collected_A[block.thread_rank() * 9 + j] = A[coll_id * 9 + j];
 		}
 		block.sync();
 
-		// Iterate over current batch
+		// Iterate over current batch (#threads of gaussians)
 		for (int j = 0; !done && j < min(BLOCK_SIZE, toDo); j++)
 		{
 			// Keep track of current position in range
@@ -423,6 +433,29 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// and its exponential falloff from mean.
 			// Avoid numerical instabilities (see paper appendix).
 			float alpha = min(0.99f, con_o.w * exp(power));
+
+			// hx = [-1, 0, pix_cam.x], hy = [0, -1, pix_cam.y]
+			// hu = A^T * hx, hv = A^T * hy
+			float hu_1 = -1.0f * collected_A[j * 9 + 0] + pix_cam.x * collected_A[j * 9 + 6];
+			float hu_2 = -1.0f * collected_A[j * 9 + 1] + pix_cam.x * collected_A[j * 9 + 7];
+			float hu_4 = -1.0f * collected_A[j * 9 + 2] + pix_cam.x * collected_A[j * 9 + 8];
+
+			float hv_1 = -1.0f * collected_A[j * 9 + 3] + pix_cam.y * collected_A[j * 9 + 6];
+			float hv_2 = -1.0f * collected_A[j * 9 + 4] + pix_cam.y * collected_A[j * 9 + 7];
+			float hv_4 = -1.0f * collected_A[j * 9 + 5] + pix_cam.y * collected_A[j * 9 + 8];
+
+			float u = (hu_2*hv_4 - hu_4*hv_2) / (hu_1*hv_2 - hu_2*hv_1);
+			float v = (hu_1*hv_4 - hu_4*hv_1) / (hu_2*hv_1 - hu_1*hv_2);
+
+			float G_u = exp(-0.5f * (u*u + v*v));
+
+			float G_xc = exp(-0.5f * (d.x*d.x + d.y*d.y)*2.0f);
+
+			G_u = max(G_u, G_xc);
+
+			// alpha = min(0.99f, con_o.w * G_u);
+			
+
 			if (alpha < 1.0f / 255.0f)
 				continue;
 			float test_T = T * (1 - alpha);
@@ -463,10 +496,13 @@ void FORWARD::render(
 	const uint2 *ranges,
 	const uint32_t *point_list,
 	int W, int H,
+	const float focal_x, 
+	const float focal_y,
 	const float2 *means2D,
 	const float *colors,
 	const float *depths,
 	const float4 *conic_opacity,
+	const float *A,
 	float *out_alpha,
 	uint32_t *n_contrib,
 	const float *bg_color,
@@ -477,10 +513,13 @@ void FORWARD::render(
 		ranges,
 		point_list,
 		W, H,
+		focal_x,
+		focal_y,
 		means2D,
 		colors,
 		depths,
 		conic_opacity,
+		A,
 		out_alpha,
 		n_contrib,
 		bg_color,
