@@ -102,12 +102,6 @@ def visualize(rendering,depth,radii,view,idx):
     pcd.colors = o3d.utility.Vector3dVector(colors)
     # o3d.visualization.draw_geometries([pcd])
     o3d.io.write_point_cloud(f"test/output{idx}.ply", pcd)
-    pcd.estimate_normals()
-    mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
-           pcd,
-           o3d.utility.DoubleVector(radii))
-    o3d.io.write_triangle_mesh(f"test/mesh{idx}.ply", mesh)
-
     pass
 
 
