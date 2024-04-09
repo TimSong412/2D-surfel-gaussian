@@ -277,7 +277,7 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	computeSTuv(scales[idx], scale_modifier, rotations[idx], STuvs + idx * 6);
 	// Compute A
 	glm::mat3 A;
-	computeA(STuvs + idx * 6, p_view, viewmatrix, A);
+	computeA(STuvs + idx * 6, p_orig, viewmatrix, A);
 	// flat A into As
 	As[idx * 9 + 0] = A[0][0];
 	As[idx * 9 + 1] = A[0][1];
@@ -452,8 +452,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			float G_xc = exp(-0.5f * (d.x*d.x + d.y*d.y)*2.0f);
 
 			G_u = max(G_u, G_xc);
+			// G_u = G_xc;
 
-			// alpha = min(0.99f, con_o.w * G_u);
+			alpha = min(0.99f, con_o.w * G_u);
 			
 
 			if (alpha < 1.0f / 255.0f)
