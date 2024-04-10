@@ -113,8 +113,7 @@ __device__ float3 computeCov2D(const float3 &mean, float focal_x, float focal_y,
 	return {float(cov[0][0]), float(cov[0][1]), float(cov[1][1])};
 }
 
-
-// compute the H matrix 3x3 as 
+// compute the H matrix 3x3 as
 // return: s_u*t_u (3 numbers), s_v*t_v (3 numbers)
 __device__ void computeSTuv(const glm::vec3 scale, float mod, const glm::vec4 rot, float *STuv)
 {
@@ -130,39 +129,38 @@ __device__ void computeSTuv(const glm::vec3 scale, float mod, const glm::vec4 ro
 		1.f - 2.f * (y * y + z * z), 2.f * (x * y - r * z), 2.f * (x * z + r * y),
 		2.f * (x * y + r * z), 1.f - 2.f * (x * x + z * z), 2.f * (y * z - r * x),
 		2.f * (x * z - r * y), 2.f * (y * z + r * x), 1.f - 2.f * (x * x + y * y));
-	
+
 	// Tu
-	STuv[0] = scale.x*scale.x * R[0][0];
-	STuv[1] = scale.x*scale.x * R[1][0];
-	STuv[2] = scale.x*scale.x * R[2][0];
+	STuv[0] = scale.x * scale.x * R[0][0];
+	STuv[1] = scale.x * scale.x * R[1][0];
+	STuv[2] = scale.x * scale.x * R[2][0];
 
 	// Tv
-	STuv[3] = scale.y*scale.y * R[0][1];
-	STuv[4] = scale.y*scale.y * R[1][1];
-	STuv[5] = scale.y*scale.y * R[2][1];
+	STuv[3] = scale.y * scale.y * R[0][1];
+	STuv[4] = scale.y * scale.y * R[1][1];
+	STuv[5] = scale.y * scale.y * R[2][1];
 
 	// Normal
 	// normal[0] = R[0][2];
 	// normal[1] = R[1][2];
 	// normal[2] = R[2][2];
-
 }
 
 // compute the partial transformation matrix A
-__device__ void computeA(float *STuv, float3 p_k, const float* view_matrix, glm::mat3 &A)
+__device__ void computeA(float *STuv, float3 p_k, const float *view_matrix, glm::mat3 &A)
 {
 	// r1s1: the first row of view matrix times [STuv[0], STuv[1], STuv[2]]
-	float r1s1 = view_matrix[0]*STuv[0] + view_matrix[4]*STuv[1] + view_matrix[8]*STuv[2];
-	float r1s2 = view_matrix[0]*STuv[3] + view_matrix[4]*STuv[4] + view_matrix[8]*STuv[5];
-	float r2s1 = view_matrix[1]*STuv[0] + view_matrix[5]*STuv[1] + view_matrix[9]*STuv[2];
-	float r2s2 = view_matrix[1]*STuv[3] + view_matrix[5]*STuv[4] + view_matrix[9]*STuv[5];
-	float r3s1 = view_matrix[2]*STuv[0] + view_matrix[6]*STuv[1] + view_matrix[10]*STuv[2];
-	float r3s2 = view_matrix[2]*STuv[3] + view_matrix[6]*STuv[4] + view_matrix[10]*STuv[5];
+	float r1s1 = view_matrix[0] * STuv[0] + view_matrix[4] * STuv[1] + view_matrix[8] * STuv[2];
+	float r1s2 = view_matrix[0] * STuv[3] + view_matrix[4] * STuv[4] + view_matrix[8] * STuv[5];
+	float r2s1 = view_matrix[1] * STuv[0] + view_matrix[5] * STuv[1] + view_matrix[9] * STuv[2];
+	float r2s2 = view_matrix[1] * STuv[3] + view_matrix[5] * STuv[4] + view_matrix[9] * STuv[5];
+	float r3s1 = view_matrix[2] * STuv[0] + view_matrix[6] * STuv[1] + view_matrix[10] * STuv[2];
+	float r3s2 = view_matrix[2] * STuv[3] + view_matrix[6] * STuv[4] + view_matrix[10] * STuv[5];
 
 	// r1p_t1: the first row of view matrix times p_k plus the translation
-	float r1p_t1 = view_matrix[0]*p_k.x + view_matrix[4]*p_k.y + view_matrix[8]*p_k.z + view_matrix[12];
-	float r2p_t2 = view_matrix[1]*p_k.x + view_matrix[5]*p_k.y + view_matrix[9]*p_k.z + view_matrix[13];
-	float r3p_t3 = view_matrix[2]*p_k.x + view_matrix[6]*p_k.y + view_matrix[10]*p_k.z + view_matrix[14];
+	float r1p_t1 = view_matrix[0] * p_k.x + view_matrix[4] * p_k.y + view_matrix[8] * p_k.z + view_matrix[12];
+	float r2p_t2 = view_matrix[1] * p_k.x + view_matrix[5] * p_k.y + view_matrix[9] * p_k.z + view_matrix[13];
+	float r3p_t3 = view_matrix[2] * p_k.x + view_matrix[6] * p_k.y + view_matrix[10] * p_k.z + view_matrix[14];
 
 	A[0][0] = r1s1;
 	A[0][1] = r1s2;
@@ -178,11 +176,10 @@ __device__ void computeA(float *STuv, float3 p_k, const float* view_matrix, glm:
 	// float r1n = view_matrix[0]*normal[0] + view_matrix[4]*normal[1] + view_matrix[8]*normal[2];
 	// float r2n = view_matrix[1]*normal[0] + view_matrix[5]*normal[1] + view_matrix[9]*normal[2];
 	// float r3n = view_matrix[2]*normal[0] + view_matrix[6]*normal[1] + view_matrix[10]*normal[2];
-	
+
 	// normal[0] = r1n;
 	// normal[1] = r2n;
 	// normal[2] = r3n;
-
 }
 
 // Forward method for converting scale and rotation properties of each
@@ -195,10 +192,10 @@ __device__ void computeCov3D(const glm::vec3 scale, float mod, const glm::vec4 r
 	S[0][0] = mod * scale.x;
 	S[1][1] = mod * scale.y;
 	S[2][2] = mod * scale.z;
-	
-	#ifdef OURS
-	S[2][2] = mod * sqrt(min(scale.x*scale.x, scale.y*scale.y)) * 0.1;
-	#endif
+
+#ifdef OURS
+	S[2][2] = mod * sqrt(min(scale.x * scale.x, scale.y * scale.y)) * 0.1;
+#endif
 
 	// Normalize quaternion to get valid rotation
 	glm::vec4 q = rot; // / glm::length(rot);
@@ -308,7 +305,6 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	As[idx * 9 + 7] = A[2][1];
 	As[idx * 9 + 8] = A[2][2];
 
-
 	// Compute 2D screen-space covariance matrix
 	float3 cov = computeCov2D(p_orig, focal_x, focal_y, tan_fovx, tan_fovy, cov3D, viewmatrix);
 
@@ -360,6 +356,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	renderCUDA(
 		const uint2 *__restrict__ ranges,
 		const uint32_t *__restrict__ point_list,
+		const float *__restrict__ orig_points,
+		const float *viewmatrix,
 		int W, int H,
 		const float focal_x,
 		const float focal_y,
@@ -367,6 +365,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const float *__restrict__ features,
 		const float *__restrict__ depths,
 		const float4 *__restrict__ conic_opacity,
+		const float *__restrict__ STuv,
 		const float *__restrict__ A,
 		float *__restrict__ out_alpha,
 		uint32_t *__restrict__ n_contrib,
@@ -401,6 +400,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	__shared__ float2 collected_xy[BLOCK_SIZE];
 	__shared__ float4 collected_conic_opacity[BLOCK_SIZE];
 	__shared__ float collected_A[BLOCK_SIZE * 9];
+	__shared__ float collected_STuv[BLOCK_SIZE * 6];
+	__shared__ float collected_origin[BLOCK_SIZE * 3];
 	// __shared__ float collected_normal[BLOCK_SIZE * 3];
 
 	// Initialize helper variables
@@ -410,7 +411,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float C[CHANNELS] = {0};
 	float weight = 0;
 	float D = 0;
-	
+	float3 intersect_w;
+	float3 intersect_c;
+
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
@@ -430,9 +433,12 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
 			for (int j = 0; j < 9; j++)
 				collected_A[block.thread_rank() * 9 + j] = A[coll_id * 9 + j];
+			for (int j = 0; j < 6; j++)
+				collected_STuv[block.thread_rank() * 6 + j] = STuv[coll_id * 6 + j];
+			for (int j = 0; j < 3; j++)
+				collected_origin[block.thread_rank() * 3 + j] = orig_points[coll_id * 3 + j];
 			// for (int j = 0; j < 3; j++)
 			// 	collected_normal[block.thread_rank() * 3 + j] = normal[coll_id * 3 + j];
-			
 		}
 		block.sync();
 
@@ -467,19 +473,25 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			float hv_2 = -1.0f * collected_A[j * 9 + 4] + pix_cam.y * collected_A[j * 9 + 7];
 			float hv_4 = -1.0f * collected_A[j * 9 + 5] + pix_cam.y * collected_A[j * 9 + 8];
 
-			float u = (hu_2*hv_4 - hu_4*hv_2) / (hu_1*hv_2 - hu_2*hv_1);
-			float v = (hu_1*hv_4 - hu_4*hv_1) / (hu_2*hv_1 - hu_1*hv_2);
+			float u = (hu_2 * hv_4 - hu_4 * hv_2) / (hu_1 * hv_2 - hu_2 * hv_1);
+			float v = (hu_1 * hv_4 - hu_4 * hv_1) / (hu_2 * hv_1 - hu_1 * hv_2);
 
-			float G_u = exp(-0.5f * (u*u + v*v));
+			float G_u = exp(-0.5f * (u * u + v * v));
 
-			float G_xc = exp(-0.5f * (d.x*d.x + d.y*d.y)*2.0f);
+			float G_xc = exp(-0.5f * (d.x * d.x + d.y * d.y) * 2.0f);
+
+			intersect_w = {collected_origin[j * 3 + 0] + collected_STuv[j * 6 + 0] * u + collected_STuv[j * 6 + 3] * v,
+						   collected_origin[j * 3 + 1] + collected_STuv[j * 6 + 1] * u + collected_STuv[j * 6 + 4] * v,
+						   collected_origin[j * 3 + 2] + collected_STuv[j * 6 + 2] * u + collected_STuv[j * 6 + 5] * v};
+			intersect_c = transformPoint4x3(intersect_w, viewmatrix);
+
 
 			G_u = max(G_u, G_xc);
 			// G_u = G_xc;
 
-			#ifdef OURS
+#ifdef OURS
 			alpha = min(0.99f, con_o.w * G_u);
-			#endif
+#endif
 
 			if (alpha < 1.0f / 255.0f)
 				continue;
@@ -495,15 +507,16 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
 			weight += alpha * T;
 
-			#ifdef OURS
+#ifdef OURS
 			if (T >= 0.5f)
 			{
-				D = depths[collected_id[j]];
+				D = intersect_c.z;
+				// D = depths[collected_id[j]];
 				// n_i = {collected_normal[j * 3 + 0], collected_normal[j * 3 + 1], collected_normal[j * 3 + 2]};
 			}
-			#else
+#else
 			D += depths[collected_id[j]] * alpha * T;
-			#endif
+#endif
 
 			T = test_T;
 
@@ -529,13 +542,16 @@ void FORWARD::render(
 	const dim3 grid, dim3 block,
 	const uint2 *ranges,
 	const uint32_t *point_list,
+	const float *orig_points,
+	const float *viewmatrix,
 	int W, int H,
-	const float focal_x, 
+	const float focal_x,
 	const float focal_y,
 	const float2 *means2D,
 	const float *colors,
 	const float *depths,
 	const float4 *conic_opacity,
+	const float *STuv,
 	const float *A,
 	float *out_alpha,
 	uint32_t *n_contrib,
@@ -546,6 +562,8 @@ void FORWARD::render(
 	renderCUDA<NUM_CHANNELS><<<grid, block>>>(
 		ranges,
 		point_list,
+		orig_points,
+		viewmatrix,
 		W, H,
 		focal_x,
 		focal_y,
@@ -553,6 +571,7 @@ void FORWARD::render(
 		colors,
 		depths,
 		conic_opacity,
+		STuv,
 		A,
 		out_alpha,
 		n_contrib,
