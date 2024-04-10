@@ -36,6 +36,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     makedirs(depth_path, exist_ok=True)
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
+        torch.cuda.empty_cache()
         render_pkg = render(view, gaussians, pipeline, background)
         rendering = render_pkg["render"]
         depth= render_pkg["depth"]
