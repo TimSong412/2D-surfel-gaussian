@@ -13,6 +13,7 @@
 #include "auxiliary.h"
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
+#define OURS
 namespace cg = cooperative_groups;
 
 // Forward method for converting the input spherical harmonics
@@ -140,6 +141,11 @@ __device__ void computeSTuv(const glm::vec3 scale, float mod, const glm::vec4 ro
 	STuv[4] = scale.y*scale.y * R[1][1];
 	STuv[5] = scale.y*scale.y * R[2][1];
 
+	// Normal
+	// normal[0] = R[0][2];
+	// normal[1] = R[1][2];
+	// normal[2] = R[2][2];
+
 }
 
 // compute the partial transformation matrix A
@@ -168,6 +174,15 @@ __device__ void computeA(float *STuv, float3 p_k, const float* view_matrix, glm:
 	A[2][1] = r3s2;
 	A[2][2] = r3p_t3;
 
+	// Normal
+	// float r1n = view_matrix[0]*normal[0] + view_matrix[4]*normal[1] + view_matrix[8]*normal[2];
+	// float r2n = view_matrix[1]*normal[0] + view_matrix[5]*normal[1] + view_matrix[9]*normal[2];
+	// float r3n = view_matrix[2]*normal[0] + view_matrix[6]*normal[1] + view_matrix[10]*normal[2];
+	
+	// normal[0] = r1n;
+	// normal[1] = r2n;
+	// normal[2] = r3n;
+
 }
 
 // Forward method for converting scale and rotation properties of each
@@ -180,6 +195,10 @@ __device__ void computeCov3D(const glm::vec3 scale, float mod, const glm::vec4 r
 	S[0][0] = mod * scale.x;
 	S[1][1] = mod * scale.y;
 	S[2][2] = mod * scale.z;
+	
+	#ifdef OURS
+	S[2][2] = mod * sqrt(min(scale.x*scale.x, scale.y*scale.y)) * 0.1;
+	#endif
 
 	// Normalize quaternion to get valid rotation
 	glm::vec4 q = rot; // / glm::length(rot);
@@ -382,6 +401,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	__shared__ float2 collected_xy[BLOCK_SIZE];
 	__shared__ float4 collected_conic_opacity[BLOCK_SIZE];
 	__shared__ float collected_A[BLOCK_SIZE * 9];
+	// __shared__ float collected_normal[BLOCK_SIZE * 3];
 
 	// Initialize helper variables
 	float T = 1.0f;
@@ -390,7 +410,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float C[CHANNELS] = {0};
 	float weight = 0;
 	float D = 0;
-
+	
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
@@ -410,6 +430,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
 			for (int j = 0; j < 9; j++)
 				collected_A[block.thread_rank() * 9 + j] = A[coll_id * 9 + j];
+			// for (int j = 0; j < 3; j++)
+			// 	collected_normal[block.thread_rank() * 3 + j] = normal[coll_id * 3 + j];
+			
 		}
 		block.sync();
 
@@ -454,8 +477,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			G_u = max(G_u, G_xc);
 			// G_u = G_xc;
 
+			#ifdef OURS
 			alpha = min(0.99f, con_o.w * G_u);
-			
+			#endif
 
 			if (alpha < 1.0f / 255.0f)
 				continue;
@@ -470,7 +494,16 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			for (int ch = 0; ch < CHANNELS; ch++)
 				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
 			weight += alpha * T;
+
+			#ifdef OURS
+			if (T >= 0.5f)
+			{
+				D = depths[collected_id[j]];
+				// n_i = {collected_normal[j * 3 + 0], collected_normal[j * 3 + 1], collected_normal[j * 3 + 2]};
+			}
+			#else
 			D += depths[collected_id[j]] * alpha * T;
+			#endif
 
 			T = test_T;
 
