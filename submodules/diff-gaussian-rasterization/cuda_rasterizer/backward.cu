@@ -413,12 +413,14 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const uint2 *__restrict__ ranges,
 		const uint32_t *__restrict__ point_list,
 		int W, int H,
+		const float focal_x, const float focal_y,
 		const float *__restrict__ bg_color,
 		const float2 *__restrict__ points_xy_image,
 		const float4 *__restrict__ conic_opacity,
 		const float *__restrict__ colors,
 		const float *__restrict__ depths,
 		const float *__restrict__ alphas,
+		const float *__restrict__ A,
 		const uint32_t *__restrict__ n_contrib,
 		const float *__restrict__ dL_dpixels,
 		const float *__restrict__ dL_dpixel_depths,
@@ -427,7 +429,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		float4 *__restrict__ dL_dconic2D,
 		float *__restrict__ dL_dopacity,
 		float *__restrict__ dL_dcolors,
-		float *__restrict__ dL_ddepths)
+		float *__restrict__ dL_ddepths,
+		float *__restrict__ dL_dA)
 {
 	// We rasterize again. Compute necessary block info.
 	auto block = cg::this_thread_block();
@@ -437,6 +440,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	const uint2 pix = {pix_min.x + block.thread_index().x, pix_min.y + block.thread_index().y};
 	const uint32_t pix_id = W * pix.y + pix.x;
 	const float2 pixf = {(float)pix.x, (float)pix.y};
+
+	float2 pix_cam = {(pixf.x - (W - 1) * 0.5f) / focal_x, (pixf.y - (H - 1) * 0.5f) / focal_y};
 
 	const bool inside = pix.x < W && pix.y < H;
 	const uint2 range = ranges[block.group_index().y * horizontal_blocks + block.group_index().x];
@@ -451,6 +456,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	__shared__ float4 collected_conic_opacity[BLOCK_SIZE];
 	__shared__ float collected_colors[C * BLOCK_SIZE];
 	__shared__ float collected_depths[BLOCK_SIZE];
+	__shared__ float collected_A[BLOCK_SIZE * 9];
 
 	// In the forward, we stored the final value for T, the
 	// product of all (1 - alpha) factors.
@@ -501,6 +507,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			for (int i = 0; i < C; i++)
 				collected_colors[i * BLOCK_SIZE + block.thread_rank()] = colors[coll_id * C + i];
 			collected_depths[block.thread_rank()] = depths[coll_id];
+			for (int j = 0; j < 9; j++)
+				collected_A[block.thread_rank() * 9 + j] = A[coll_id * 9 + j];
 		}
 		block.sync();
 
@@ -522,9 +530,31 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				continue;
 
 			const float G = exp(power);
-			const float alpha = min(0.99f, con_o.w * G);
+			float alpha = min(0.99f, con_o.w * G);
 			if (alpha < 1.0f / 255.0f)
 				continue;
+
+			float hu_1 = -1.0f * collected_A[j * 9 + 0] + pix_cam.x * collected_A[j * 9 + 6];
+			float hu_2 = -1.0f * collected_A[j * 9 + 1] + pix_cam.x * collected_A[j * 9 + 7];
+			float hu_4 = -1.0f * collected_A[j * 9 + 2] + pix_cam.x * collected_A[j * 9 + 8];
+
+			float hv_1 = -1.0f * collected_A[j * 9 + 3] + pix_cam.y * collected_A[j * 9 + 6];
+			float hv_2 = -1.0f * collected_A[j * 9 + 4] + pix_cam.y * collected_A[j * 9 + 7];
+			float hv_4 = -1.0f * collected_A[j * 9 + 5] + pix_cam.y * collected_A[j * 9 + 8];
+
+			float u = (hu_2 * hv_4 - hu_4 * hv_2) / (hu_1 * hv_2 - hu_2 * hv_1);
+			float v = (hu_1 * hv_4 - hu_4 * hv_1) / (hu_2 * hv_1 - hu_1 * hv_2);
+
+			float G_u = exp(-0.5f * (u * u + v * v));
+
+			float G_xc = exp(-0.5f * (d.x * d.x + d.y * d.y) * 2.0f);
+
+			float G_hat = max(G_u, G_xc);
+			// G_u = G_xc;
+
+#ifdef OURS
+			alpha = min(0.99f, con_o.w * G_hat);
+#endif
 
 			T = T / (1.f - alpha);
 			const float dchannel_dcolor = alpha * T;
@@ -579,6 +609,37 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float dG_ddelx = -gdx * con_o.x - gdy * con_o.y;
 			const float dG_ddely = -gdy * con_o.z - gdx * con_o.y;
 
+			// NEW
+			const float dG_du = -u * G_u;
+			const float dG_dv = -v * G_u;
+
+			const float du_dhu1 = hv_2 * (hu_4 * hv_2 - hu_2 * hv_4) / ((hu_1 * hv_2 - hu_2 * hv_1) * (hu_1 * hv_2 - hu_2 * hv_1));
+			const float du_dhu2 = hv_2 * (hu_1 * hv_4 - hu_4 * hv_1) / ((hu_2 * hv_1 - hu_1 * hv_2) * (hu_2 * hv_1 - hu_1 * hv_2));
+			const float du_dhu3 = hv_2 / (hu_2 * hv_1 - hu_1 * hv_2);
+
+			const float du_dhv1 = hu_2 * (hu_4 * hv_2 - hu_2 * hv_4) / ((hu_1 * hv_2 - hu_2 * hv_1) * (hu_1 * hv_2 - hu_2 * hv_1));
+			const float du_dhv2 = hu_2 * (hu_1 * hv_4 - hu_4 * hv_1) / ((hu_2 * hv_1 - hu_1 * hv_2) * (hu_2 * hv_1 - hu_1 * hv_2));
+			const float du_dhv3 = hu_2 / (hu_2 * hv_1 - hu_1 * hv_2);
+
+			const float dv_dhu1 = hv_1 * (hu_2 * hv_4 - hu_4 * hv_2) / ((hu_1 * hv_2 - hu_2 * hv_1) * (hu_1 * hv_2 - hu_2 * hv_1));
+			const float dv_dhu2 = hv_1 * (hu_4 * hv_1 - hu_1 * hv_4) / ((hu_2 * hv_1 - hu_1 * hv_2) * (hu_2 * hv_1 - hu_1 * hv_2));
+			const float dv_dhu3 = hv_1 / (hu_2 * hv_1 - hu_1 * hv_2);
+
+			const float dv_dhv1 = hu_1 * (hu_2 * hv_4 - hu_4 * hv_2) / ((hu_1 * hv_2 - hu_2 * hv_1) * (hu_1 * hv_2 - hu_2 * hv_1));
+			const float dv_dhv2 = hu_1 * (hu_4 * hv_1 - hu_1 * hv_4) / ((hu_2 * hv_1 - hu_1 * hv_2) * (hu_2 * hv_1 - hu_1 * hv_2));
+			const float dv_dhv3 = hu_1 / (hu_2 * hv_1 - hu_1 * hv_2);
+
+			glm::mat3 dL_dA_local;
+			dL_dA_local[0][0] = dL_dG * (dG_du * (-du_dhu1) + dG_dv * (-dv_dhu1));
+			dL_dA_local[0][1] = dL_dG * (dG_du * (-du_dhv1) + dG_dv * (-dv_dhv1));
+			dL_dA_local[0][2] = dL_dG * (dG_du * (du_dhu1 * xy.x + du_dhv1 * xy.y) + dG_dv * (dv_dhu1 * xy.x + dv_dhv1 * xy.y));
+			dL_dA_local[1][0] = dL_dG * (dG_du * (-du_dhv2) + dG_dv * (-dv_dhv2));
+			dL_dA_local[1][1] = dL_dG * (dG_du * (-du_dhu2) + dG_dv * (-dv_dhu2));
+			dL_dA_local[1][2] = dL_dG * (dG_du * (du_dhu2 * xy.x + du_dhv2 * xy.y) + dG_dv * (dv_dhu2 * xy.x + dv_dhv2 * xy.y));
+			dL_dA_local[2][0] = dL_dG * (dG_du * (-du_dhu3) + dG_dv * (-dv_dhu3));
+			dL_dA_local[2][1] = dL_dG * (dG_du * (-du_dhv3) + dG_dv * (-dv_dhv3));
+			dL_dA_local[2][2] = dL_dG * (dG_du * (du_dhu3 * xy.x + du_dhv3 * xy.y) + dG_dv * (dv_dhu3 * xy.x + dv_dhv3 * xy.y));
+
 			// Update gradients w.r.t. 2D mean position of the Gaussian
 			atomicAdd(&dL_dmean2D[global_id].x, dL_dG * dG_ddelx * ddelx_dx);
 			atomicAdd(&dL_dmean2D[global_id].y, dL_dG * dG_ddely * ddely_dy);
@@ -590,6 +651,18 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			// Update gradients w.r.t. opacity of the Gaussian
 			atomicAdd(&(dL_dopacity[global_id]), G * dL_dopa);
+
+			// NEW
+			// dL_dA: N*9 array
+			atomicAdd(&(dL_dA[global_id * 9 + 0]), dL_dA_local[0][0]);
+			atomicAdd(&(dL_dA[global_id * 9 + 1]), dL_dA_local[0][1]);
+			atomicAdd(&(dL_dA[global_id * 9 + 2]), dL_dA_local[0][2]);
+			atomicAdd(&(dL_dA[global_id * 9 + 3]), dL_dA_local[1][0]);
+			atomicAdd(&(dL_dA[global_id * 9 + 4]), dL_dA_local[1][1]);
+			atomicAdd(&(dL_dA[global_id * 9 + 5]), dL_dA_local[1][2]);
+			atomicAdd(&(dL_dA[global_id * 9 + 6]), dL_dA_local[2][0]);
+			atomicAdd(&(dL_dA[global_id * 9 + 7]), dL_dA_local[2][1]);
+			atomicAdd(&(dL_dA[global_id * 9 + 8]), dL_dA_local[2][2]);
 		}
 	}
 }
@@ -667,12 +740,14 @@ void BACKWARD::render(
 	const uint2 *ranges,
 	const uint32_t *point_list,
 	int W, int H,
+	const float focal_x, const float focal_y,
 	const float *bg_color,
 	const float2 *means2D,
 	const float4 *conic_opacity,
 	const float *colors,
 	const float *depths,
 	const float *alphas,
+	const float *A,
 	const uint32_t *n_contrib,
 	const float *dL_dpixels,
 	const float *dL_dpixel_depths,
@@ -681,18 +756,21 @@ void BACKWARD::render(
 	float4 *dL_dconic2D,
 	float *dL_dopacity,
 	float *dL_dcolors,
-	float *dL_ddepths)
+	float *dL_ddepths,
+	float *dL_dA)
 {
 	renderCUDA<NUM_CHANNELS><<<grid, block>>>(
 		ranges,
 		point_list,
 		W, H,
+		focal_x, focal_y,
 		bg_color,
 		means2D,
 		conic_opacity,
 		colors,
 		depths,
 		alphas,
+		A,
 		n_contrib,
 		dL_dpixels,
 		dL_dpixel_depths,
@@ -701,5 +779,6 @@ void BACKWARD::render(
 		dL_dconic2D,
 		dL_dopacity,
 		dL_dcolors,
-		dL_ddepths);
+		dL_ddepths,
+		dL_dA);
 }

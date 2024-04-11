@@ -13,7 +13,6 @@
 #include "auxiliary.h"
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
-#define OURS
 namespace cg = cooperative_groups;
 
 // Forward method for converting the input spherical harmonics

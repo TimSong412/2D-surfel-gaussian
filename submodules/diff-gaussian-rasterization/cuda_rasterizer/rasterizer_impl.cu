@@ -391,6 +391,7 @@ void CudaRasterizer::Rasterizer::backward(
 	float *dL_dsh,
 	float *dL_dscale,
 	float *dL_drot,
+	float *dL_dA,
 	bool debug)
 {
 	GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
@@ -419,12 +420,14 @@ void CudaRasterizer::Rasterizer::backward(
 				   imgState.ranges,
 				   binningState.point_list,
 				   width, height,
+				   focal_x, focal_y,
 				   background,
 				   geomState.means2D,
 				   geomState.conic_opacity,
 				   color_ptr,
 				   depth_ptr,
 				   alphas,
+				   geomState.A,
 				   imgState.n_contrib,
 				   dL_dpix,
 				   dL_dpix_depth,
@@ -433,7 +436,8 @@ void CudaRasterizer::Rasterizer::backward(
 				   (float4 *)dL_dconic,
 				   dL_dopacity,
 				   dL_dcolor,
-				   dL_ddepth),
+				   dL_ddepth, 
+				   dL_dA),
 			   debug)
 
 	// Take care of the rest of preprocessing. Was the precomputed covariance
