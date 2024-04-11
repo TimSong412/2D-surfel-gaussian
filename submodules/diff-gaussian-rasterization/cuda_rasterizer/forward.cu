@@ -293,16 +293,6 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	// Compute A
 	glm::mat3 A;
 	computeA(STuvs + idx * 6, p_orig, viewmatrix, As + idx * 9, normal);
-	// flat A into As
-	// As[idx * 9 + 0] = A[0][0];
-	// As[idx * 9 + 1] = A[0][1];
-	// As[idx * 9 + 2] = A[0][2];
-	// As[idx * 9 + 3] = A[1][0];
-	// As[idx * 9 + 4] = A[1][1];
-	// As[idx * 9 + 5] = A[1][2];
-	// As[idx * 9 + 6] = A[2][0];
-	// As[idx * 9 + 7] = A[2][1];
-	// As[idx * 9 + 8] = A[2][2];
 
 	// Compute 2D screen-space covariance matrix
 	float3 cov = computeCov2D(p_orig, focal_x, focal_y, tan_fovx, tan_fovy, cov3D, viewmatrix);
