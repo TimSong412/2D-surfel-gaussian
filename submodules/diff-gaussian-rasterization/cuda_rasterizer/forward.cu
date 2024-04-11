@@ -115,7 +115,7 @@ __device__ float3 computeCov2D(const float3 &mean, float focal_x, float focal_y,
 
 // compute the H matrix 3x3 as
 // return: s_u*t_u (3 numbers), s_v*t_v (3 numbers)
-__device__ void computeSTuv(const glm::vec3 scale, float mod, const glm::vec4 rot, float *STuv)
+__device__ void computeSTuv(const glm::vec3 scale, const float mod, const glm::vec4 rot, float *STuv, float3 &normal)
 {
 	// Normalize quaternion to get valid rotation
 	glm::vec4 q = rot; // / glm::length(rot);
@@ -131,23 +131,21 @@ __device__ void computeSTuv(const glm::vec3 scale, float mod, const glm::vec4 ro
 		2.f * (x * z - r * y), 2.f * (y * z + r * x), 1.f - 2.f * (x * x + y * y));
 
 	// Tu
-	STuv[0] = scale.x * scale.x * R[0][0];
-	STuv[1] = scale.x * scale.x * R[1][0];
-	STuv[2] = scale.x * scale.x * R[2][0];
+	STuv[0] = scale.x * R[0][0];
+	STuv[1] = scale.x * R[1][0];
+	STuv[2] = scale.x * R[2][0];
 
 	// Tv
-	STuv[3] = scale.y * scale.y * R[0][1];
-	STuv[4] = scale.y * scale.y * R[1][1];
-	STuv[5] = scale.y * scale.y * R[2][1];
+	STuv[3] = scale.y * R[0][1];
+	STuv[4] = scale.y * R[1][1];
+	STuv[5] = scale.y * R[2][1];
 
 	// Normal
-	// normal[0] = R[0][2];
-	// normal[1] = R[1][2];
-	// normal[2] = R[2][2];
+	normal = {R[0][2], R[1][2], R[2][2]};
 }
 
 // compute the partial transformation matrix A
-__device__ void computeA(float *STuv, float3 p_k, const float *view_matrix, glm::mat3 &A)
+__device__ void computeA(float *STuv, float3 p_k, const float *view_matrix, float *A, float3 &normal)
 {
 	// r1s1: the first row of view matrix times [STuv[0], STuv[1], STuv[2]]
 	float r1s1 = view_matrix[0] * STuv[0] + view_matrix[4] * STuv[1] + view_matrix[8] * STuv[2];
@@ -162,24 +160,22 @@ __device__ void computeA(float *STuv, float3 p_k, const float *view_matrix, glm:
 	float r2p_t2 = view_matrix[1] * p_k.x + view_matrix[5] * p_k.y + view_matrix[9] * p_k.z + view_matrix[13];
 	float r3p_t3 = view_matrix[2] * p_k.x + view_matrix[6] * p_k.y + view_matrix[10] * p_k.z + view_matrix[14];
 
-	A[0][0] = r1s1;
-	A[0][1] = r1s2;
-	A[0][2] = r1p_t1;
-	A[1][0] = r2s1;
-	A[1][1] = r2s2;
-	A[1][2] = r2p_t2;
-	A[2][0] = r3s1;
-	A[2][1] = r3s2;
-	A[2][2] = r3p_t3;
+	A[0] = r1s1;
+	A[1] = r1s2;
+	A[2] = r1p_t1;
+	A[3] = r2s1;
+	A[4] = r2s2;
+	A[5] = r2p_t2;
+	A[6] = r3s1;
+	A[7] = r3s2;
+	A[8] = r3p_t3;
 
 	// Normal
-	// float r1n = view_matrix[0]*normal[0] + view_matrix[4]*normal[1] + view_matrix[8]*normal[2];
-	// float r2n = view_matrix[1]*normal[0] + view_matrix[5]*normal[1] + view_matrix[9]*normal[2];
-	// float r3n = view_matrix[2]*normal[0] + view_matrix[6]*normal[1] + view_matrix[10]*normal[2];
+	float r1n = view_matrix[0] * normal.x + view_matrix[4] * normal.y + view_matrix[8] * normal.z;
+	float r2n = view_matrix[1] * normal.x + view_matrix[5] * normal.y + view_matrix[9] * normal.z;
+	float r3n = view_matrix[2] * normal.x + view_matrix[6] * normal.y + view_matrix[10] * normal.z;
 
-	// normal[0] = r1n;
-	// normal[1] = r2n;
-	// normal[2] = r3n;
+	normal = {r1n, r2n, r3n};
 }
 
 // Forward method for converting scale and rotation properties of each
@@ -194,7 +190,7 @@ __device__ void computeCov3D(const glm::vec3 scale, float mod, const glm::vec4 r
 	S[2][2] = mod * scale.z;
 
 #ifdef OURS
-	S[2][2] = mod * sqrt(min(scale.x * scale.x, scale.y * scale.y)) * 0.1;
+	S[2][2] = mod * min(glm::abs(scale.x), glm::abs(scale.y)) * 0.1;
 #endif
 
 	// Normalize quaternion to get valid rotation
@@ -250,6 +246,7 @@ __global__ void preprocessCUDA(int P, int D, int M,
 							   float *cov3Ds,
 							   float *STuvs,
 							   float *As,
+							   float3 *normals,
 							   float *rgb,
 							   float4 *conic_opacity,
 							   const dim3 grid,
@@ -276,6 +273,8 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	float p_w = 1.0f / (p_hom.w + 0.0000001f);
 	float3 p_proj = {p_hom.x * p_w, p_hom.y * p_w, p_hom.z * p_w};
 
+	float3 normal = {0, 0, 0};
+
 	// If 3D covariance matrix is precomputed, use it, otherwise compute
 	// from scaling and rotation parameters.
 	const float *cov3D;
@@ -290,20 +289,20 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	}
 
 	// Compute STuv
-	computeSTuv(scales[idx], scale_modifier, rotations[idx], STuvs + idx * 6);
+	computeSTuv(scales[idx], scale_modifier, rotations[idx], STuvs + idx * 6, normal);
 	// Compute A
 	glm::mat3 A;
-	computeA(STuvs + idx * 6, p_orig, viewmatrix, A);
+	computeA(STuvs + idx * 6, p_orig, viewmatrix, As + idx * 9, normal);
 	// flat A into As
-	As[idx * 9 + 0] = A[0][0];
-	As[idx * 9 + 1] = A[0][1];
-	As[idx * 9 + 2] = A[0][2];
-	As[idx * 9 + 3] = A[1][0];
-	As[idx * 9 + 4] = A[1][1];
-	As[idx * 9 + 5] = A[1][2];
-	As[idx * 9 + 6] = A[2][0];
-	As[idx * 9 + 7] = A[2][1];
-	As[idx * 9 + 8] = A[2][2];
+	// As[idx * 9 + 0] = A[0][0];
+	// As[idx * 9 + 1] = A[0][1];
+	// As[idx * 9 + 2] = A[0][2];
+	// As[idx * 9 + 3] = A[1][0];
+	// As[idx * 9 + 4] = A[1][1];
+	// As[idx * 9 + 5] = A[1][2];
+	// As[idx * 9 + 6] = A[2][0];
+	// As[idx * 9 + 7] = A[2][1];
+	// As[idx * 9 + 8] = A[2][2];
 
 	// Compute 2D screen-space covariance matrix
 	float3 cov = computeCov2D(p_orig, focal_x, focal_y, tan_fovx, tan_fovy, cov3D, viewmatrix);
@@ -346,6 +345,11 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	// Inverse 2D covariance and opacity neatly pack into one float4
 	conic_opacity[idx] = {conic.x, conic.y, conic.z, opacities[idx]};
 	tiles_touched[idx] = (rect_max.y - rect_min.y) * (rect_max.x - rect_min.x);
+	normals[idx] = normal;
+	if (glm::abs((normal.x * normal.x + normal.y * normal.y + normal.z * normal.z) - 1) > 0.0001f)
+	{
+		printf("normal not normalized\n");
+	}
 }
 
 // Main rasterization method. Collaboratively works on one tile per
@@ -367,11 +371,13 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const float4 *__restrict__ conic_opacity,
 		const float *__restrict__ STuv,
 		const float *__restrict__ A,
+		const float3 *__restrict__ normal,
 		float *__restrict__ out_alpha,
 		uint32_t *__restrict__ n_contrib,
 		const float *__restrict__ bg_color,
 		float *__restrict__ out_color,
-		float *__restrict__ out_depth)
+		float *__restrict__ out_depth,
+		float *__restrict__ out_normal)
 {
 	// Identify current tile and associated min/max pixel range.
 	auto block = cg::this_thread_block();
@@ -402,6 +408,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	__shared__ float collected_A[BLOCK_SIZE * 9];
 	__shared__ float collected_STuv[BLOCK_SIZE * 6];
 	__shared__ float collected_origin[BLOCK_SIZE * 3];
+	__shared__ float3 collected_normal[BLOCK_SIZE];
 	// __shared__ float collected_normal[BLOCK_SIZE * 3];
 
 	// Initialize helper variables
@@ -413,6 +420,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float D = 0;
 	float3 intersect_w;
 	float3 intersect_c;
+	float3 normal_intersect;
 
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
@@ -437,8 +445,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				collected_STuv[block.thread_rank() * 6 + j] = STuv[coll_id * 6 + j];
 			for (int j = 0; j < 3; j++)
 				collected_origin[block.thread_rank() * 3 + j] = orig_points[coll_id * 3 + j];
-			// for (int j = 0; j < 3; j++)
-			// 	collected_normal[block.thread_rank() * 3 + j] = normal[coll_id * 3 + j];
+			collected_normal[block.thread_rank()] = normal[coll_id];
 		}
 		block.sync();
 
@@ -485,7 +492,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 						   collected_origin[j * 3 + 2] + collected_STuv[j * 6 + 2] * u + collected_STuv[j * 6 + 5] * v};
 			intersect_c = transformPoint4x3(intersect_w, viewmatrix);
 
-
 			G_u = max(G_u, G_xc);
 			// G_u = G_xc;
 
@@ -511,6 +517,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			if (T >= 0.5f)
 			{
 				D = intersect_c.z;
+				normal_intersect = collected_normal[j];
+				if (glm::abs(collected_normal[j].x * collected_normal[j].x + collected_normal[j].y * collected_normal[j].y + collected_normal[j].z * collected_normal[j].z - 1) > 0.0001f)
+				{
+					printf("load normal wrong\n");
+				}
 				// D = depths[collected_id[j]];
 				// n_i = {collected_normal[j * 3 + 0], collected_normal[j * 3 + 1], collected_normal[j * 3 + 2]};
 			}
@@ -535,6 +546,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
 		out_alpha[pix_id] = weight; // 1 - T;
 		out_depth[pix_id] = D;
+		// store normal like RGB, out_normal size: C*H*W, C = 3
+		out_normal[0 * H * W + pix_id] = normal_intersect.x;
+		out_normal[1 * H * W + pix_id] = normal_intersect.y;
+		out_normal[2 * H * W + pix_id] = normal_intersect.z;
 	}
 }
 
@@ -553,11 +568,13 @@ void FORWARD::render(
 	const float4 *conic_opacity,
 	const float *STuv,
 	const float *A,
+	const float3 *normal,
 	float *out_alpha,
 	uint32_t *n_contrib,
 	const float *bg_color,
 	float *out_color,
-	float *out_depth)
+	float *out_depth,
+	float *out_normal)
 {
 	renderCUDA<NUM_CHANNELS><<<grid, block>>>(
 		ranges,
@@ -573,11 +590,13 @@ void FORWARD::render(
 		conic_opacity,
 		STuv,
 		A,
+		normal,
 		out_alpha,
 		n_contrib,
 		bg_color,
 		out_color,
-		out_depth);
+		out_depth,
+		out_normal);
 }
 
 void FORWARD::preprocess(int P, int D, int M,
@@ -602,6 +621,7 @@ void FORWARD::preprocess(int P, int D, int M,
 						 float *cov3Ds,
 						 float *STuvs,
 						 float *As,
+						 float3 *normals,
 						 float *rgb,
 						 float4 *conic_opacity,
 						 const dim3 grid,
@@ -631,6 +651,7 @@ void FORWARD::preprocess(int P, int D, int M,
 		cov3Ds,
 		STuvs,
 		As,
+		normals,
 		rgb,
 		conic_opacity,
 		grid,

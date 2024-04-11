@@ -9,3 +9,4 @@ screenshots
 dataset
 *.egg-info
 dbg
+*.ply

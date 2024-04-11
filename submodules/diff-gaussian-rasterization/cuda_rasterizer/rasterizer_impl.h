@@ -42,6 +42,7 @@ namespace CudaRasterizer
 
 		float* STuv;
 		float* A;
+		float3* normal;
 
 		static GeometryState fromChunk(char*& chunk, size_t P);
 	};

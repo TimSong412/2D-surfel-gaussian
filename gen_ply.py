@@ -89,7 +89,7 @@ def gen_cube():
     
     non_edge_mask = ((abs(mesh.vertices[:, 0]) + abs(mesh.vertices[:, 1]))!= 1) & (abs(mesh.vertices[:, 0])+abs(mesh.vertices[:, 2])!= 1) & (abs(mesh.vertices[:, 1])+abs(mesh.vertices[:, 2])!= 1)
 
-    select_id = np.random.choice(sum(non_edge_mask), 100000, replace=False)
+    select_id = np.random.choice(sum(non_edge_mask), 10, replace=False)
     # select_id = [i for i in range(0, 1000, 5)]
 
     select_vert = mesh.vertices[non_edge_mask][select_id]
@@ -165,8 +165,8 @@ def gen_cube():
 
     f_rest = np.zeros((len(xyz), 45))
     opacities = np.ones((len(xyz), 1)) * 2
-    scale = np.random.uniform(-3, -2, (len(xyz), 3))
-    scale[:, 2] = -3.0
+    scale = np.random.uniform(0, 1, (len(xyz), 3))
+    scale[:, 2] = 0
     # generate quaternion based on normal
     rotation, norm1, norm2 = normal2quat(normals)
 
@@ -190,13 +190,14 @@ def gen_capsule():
     mesh = mesh.subdivide()
     mesh = mesh.subdivide()
     mesh = mesh.subdivide()
+    mesh = mesh.subdivide()
     # save ply file
     mesh.export("capsule.ply")
     print("vetices: ", len(mesh.vertices))
 
     # sample part of the vertex
     
-    select_id = np.random.choice(len(mesh.vertices), 500)
+    select_id = np.random.choice(len(mesh.vertices), 100000)
     # select_id = [i for i in range(0, 1000, 5)]
 
     select_vert = mesh.vertices[select_id]
@@ -235,8 +236,8 @@ def gen_capsule():
 
     f_rest = np.zeros((len(xyz), 45))
     opacities = np.ones((len(xyz), 1))*10
-    scale = np.random.uniform(0.001, 0.01, (len(xyz), 3))
-    scale[:, 2] = 0.01
+    scale = np.random.uniform(-3, -2, (len(xyz), 3))
+    scale[:, 2] = -3
     # generate quaternion based on normal
     rotation, norm1, norm2 = normal2quat(normals)
 
@@ -264,7 +265,7 @@ def resize_camera():
     
 
 if __name__ == "__main__":
-    gen_cube()
-    # gen_capsule()
+    # gen_cube()
+    gen_capsule()
     print("Done!")
     # resize_camera()

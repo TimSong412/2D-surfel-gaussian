@@ -170,6 +170,7 @@ CudaRasterizer::GeometryState CudaRasterizer::GeometryState::fromChunk(char *&ch
 
 	obtain(chunk, geom.STuv, P * 6, 128);
 	obtain(chunk, geom.A, P * 9, 128);
+	obtain(chunk, geom.normal, P, 128);
 	return geom;
 }
 
@@ -221,6 +222,7 @@ int CudaRasterizer::Rasterizer::forward(
 	float *out_color,
 	float *out_depth,
 	float *out_alpha,
+	float *out_normal,
 	int *radii,
 	bool debug)
 {
@@ -272,6 +274,7 @@ int CudaRasterizer::Rasterizer::forward(
 				   geomState.cov3D,
 				   geomState.STuv,
 				   geomState.A,
+				   geomState.normal,
 				   geomState.rgb,
 				   geomState.conic_opacity,
 				   tile_grid,
@@ -341,11 +344,13 @@ int CudaRasterizer::Rasterizer::forward(
 				   geomState.conic_opacity,
 				   geomState.STuv,
 				   geomState.A,
+				   geomState.normal,
 				   out_alpha,
 				   imgState.n_contrib,
 				   background,
 				   out_color,
-				   out_depth),
+				   out_depth, 
+				   out_normal),
 			   debug);
 
 	return num_rendered;
