@@ -27,6 +27,8 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
+    
+    print("debug: ", pipeline.debug)
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         # torch.cuda.empty_cache()
