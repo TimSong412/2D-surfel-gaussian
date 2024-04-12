@@ -130,14 +130,14 @@ __device__ void computeSTuv(const glm::vec3 scale, const float mod, const glm::v
 		2.f * (x * z - r * y), 2.f * (y * z + r * x), 1.f - 2.f * (x * x + y * y));
 
 	// Tu
-	STuv[0] = scale.x * R[0][0];
-	STuv[1] = scale.x * R[1][0];
-	STuv[2] = scale.x * R[2][0];
+	STuv[0] = mod * scale.x * R[0][0];
+	STuv[1] = mod * scale.x * R[1][0];
+	STuv[2] = mod * scale.x * R[2][0];
 
 	// Tv
-	STuv[3] = scale.y * R[0][1];
-	STuv[4] = scale.y * R[1][1];
-	STuv[5] = scale.y * R[2][1];
+	STuv[3] = mod * scale.y * R[0][1];
+	STuv[4] = mod * scale.y * R[1][1];
+	STuv[5] = mod * scale.y * R[2][1];
 
 	// Normal
 	normal = {R[0][2], R[1][2], R[2][2]};

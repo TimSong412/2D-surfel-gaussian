@@ -335,6 +335,107 @@ __device__ void computeCov3D(int idx, const glm::vec3 scale, float mod, const gl
 	*dL_drot = float4{dL_dq.x, dL_dq.y, dL_dq.z, dL_dq.w}; // dnormvdv(float4{ rot.x, rot.y, rot.z, rot.w }, float4{ dL_dq.x, dL_dq.y, dL_dq.z, dL_dq.w });
 }
 
+__device__ void computeASTuv(const glm::vec3 scale,
+							 const float mod,
+							 const glm::vec4 rot,
+							 const float3 p_k,
+							 const float *view_matrix,
+							 const float *dL_dA,
+							 glm::vec3 &dL_dmeans,
+							 glm::vec3 &dL_dscales,
+							 glm::vec4 &dL_drots)
+{
+	glm::vec4 q = rot; // / glm::length(rot);
+	float r = q.x;
+	float x = q.y;
+	float y = q.z;
+	float z = q.w;
+
+	glm::mat3 tuvw = glm::mat3(
+		1.f - 2.f * (y * y + z * z), 2.f * (x * y - r * z), 2.f * (x * z + r * y),
+		2.f * (x * y + r * z), 1.f - 2.f * (x * x + z * z), 2.f * (y * z - r * x),
+		2.f * (x * z - r * y), 2.f * (y * z + r * x), 1.f - 2.f * (x * x + y * y));
+
+	glm::mat3 R = glm::mat3(
+		view_matrix[0], view_matrix[4], view_matrix[8],
+		view_matrix[1], view_matrix[5], view_matrix[9],
+		view_matrix[2], view_matrix[6], view_matrix[10]);
+
+	float dL_dsu = 0;
+	float dL_dsv = 0;
+	float dL_dtu0 = 0;
+	float dL_dtu1 = 0;
+	float dL_dtu2 = 0;
+	float dL_dtv0 = 0;
+	float dL_dtv1 = 0;
+	float dL_dtv2 = 0;
+
+	// const float dA0_dsu = R[0][0] * tuvw[0][0] + R[0][1] * tuvw[1][0] + R[0][2] * tuvw[2][0];
+	// const float dA0_dtu0 = R[0][0] * scale.x;
+	// const float dA0_dtu1 = R[0][1] * scale.x;
+	// const float dA0_dtu2 = R[0][2] * scale.x;
+
+	float dAi_dsu = 0;
+	float dAi_dtu0 = 0;
+	float dAi_dtu1 = 0;
+	float dAi_dtu2 = 0;
+
+	for (int i = 0; i < 3; i++)
+	{
+		dAi_dsu = R[i][0] * tuvw[0][0] + R[i][1] * tuvw[1][0] + R[i][2] * tuvw[2][0];
+		dAi_dsu *= mod;
+		dAi_dtu0 = R[i][0] * scale.x * mod;
+		dAi_dtu1 = R[i][1] * scale.x * mod;
+		dAi_dtu2 = R[i][2] * scale.x * mod;
+
+		dL_dsu += dAi_dsu * dL_dA[i * 3];
+		dL_dtu0 += dAi_dtu0 * dL_dA[i * 3];
+		dL_dtu1 += dAi_dtu1 * dL_dA[i * 3];
+		dL_dtu2 += dAi_dtu2 * dL_dA[i * 3];
+	}
+
+	float dAi_dsv = 0;
+	float dAi_dtv0 = 0;
+	float dAi_dtv1 = 0;
+	float dAi_dtv2 = 0;
+
+	for (int i = 0; i < 3; i++)
+	{
+		dAi_dsv = R[i][0] * tuvw[0][1] + R[i][1] * tuvw[1][1] + R[i][2] * tuvw[2][1];
+		dAi_dsv *= mod;
+		dAi_dtv0 = R[i][0] * scale.y * mod;
+		dAi_dtv1 = R[i][1] * scale.y * mod;
+		dAi_dtv2 = R[i][2] * scale.y * mod;
+
+		dL_dsv += dAi_dsv * dL_dA[i * 3 + 1];
+		dL_dtv0 += dAi_dtv0 * dL_dA[i * 3 + 1];
+		dL_dtv1 += dAi_dtv1 * dL_dA[i * 3 + 1];
+		dL_dtv2 += dAi_dtv2 * dL_dA[i * 3 + 1];
+	}
+
+	float dL_dp0 = dL_dA[2] * R[0][0] + dL_dA[5] * R[1][0] + dL_dA[8] * R[2][0];
+	float dL_dp1 = dL_dA[2] * R[0][1] + dL_dA[5] * R[1][1] + dL_dA[8] * R[2][1];
+	float dL_dp2 = dL_dA[2] * R[0][2] + dL_dA[5] * R[1][2] + dL_dA[8] * R[2][2];
+
+	// compute gradient through quaternion
+	float dL_dr = 2 * z * (dL_dtu1 - dL_dtv0) - 2 * y * dL_dtu2 + 2 * x * dL_dtv2;
+	float dL_dx = 2 * y * (dL_dtu1 + dL_dtv0) + 2 * z * dL_dtu2 + 2 * r * dL_dtv2 - 4 * x * (dL_dtv1);
+	float dL_dy = 2 * x * (dL_dtu1 + dL_dtv0) - 2 * r * dL_dtu2 + 2 * z * dL_dtv2 - 4 * y * (dL_dtu0);
+	float dL_dz = 2 * r * (dL_dtu1 - dL_dtv0) + 2 * x * dL_dtu2 + 2 * y * dL_dtv2 - 4 * z * (dL_dtu0)-4 * z * (dL_dtv1);
+
+	dL_dmeans.x += dL_dp0;
+	dL_dmeans.y += dL_dp1;
+	dL_dmeans.z += dL_dp2;
+
+	dL_dscales.x += dL_dsu;
+	dL_dscales.y += dL_dsv;
+
+	dL_drots.x += dL_dr;
+	dL_drots.y += dL_dx;
+	dL_drots.z += dL_dy;
+	dL_drots.w += dL_dz;
+}
+
 // Backward pass of the preprocessing steps, except
 // for the covariance computation and inversion
 // (those are handled by a previous kernel call)
@@ -351,6 +452,7 @@ __global__ void preprocessCUDA(
 	const float *view,
 	const float *proj,
 	const glm::vec3 *campos,
+	const float *dL_dA,
 	const float3 *dL_dmean2D,
 	glm::vec3 *dL_dmeans,
 	float *dL_dcolor,
@@ -401,9 +503,14 @@ __global__ void preprocessCUDA(
 	if (shs)
 		computeColorFromSH(idx, D, M, (glm::vec3 *)means, *campos, shs, clamped, (glm::vec3 *)dL_dcolor, (glm::vec3 *)dL_dmeans, (glm::vec3 *)dL_dsh);
 
-	// Compute gradient updates due to computing covariance from scale/rotation
+// Compute gradient updates due to computing covariance from scale/rotation
+#ifdef OURS
+	if (scales)
+		computeASTuv(scales[idx], scale_modifier, rotations[idx], m, view, dL_dA + idx * 9, dL_dmeans[idx], dL_dscale[idx], dL_drot[idx]);
+#else
 	if (scales)
 		computeCov3D(idx, scales[idx], scale_modifier, rotations[idx], dL_dcov3D, dL_dscale, dL_drot);
+#endif
 }
 
 // Backward version of the rendering procedure.
@@ -682,6 +789,7 @@ void BACKWARD::preprocess(
 	const float focal_x, float focal_y,
 	const float tan_fovx, float tan_fovy,
 	const glm::vec3 *campos,
+	const float *dL_dA,
 	const float3 *dL_dmean2D,
 	const float *dL_dconic,
 	glm::vec3 *dL_dmean3D,
@@ -725,6 +833,7 @@ void BACKWARD::preprocess(
 		viewmatrix,
 		projmatrix,
 		campos,
+		dL_dA,
 		(float3 *)dL_dmean2D,
 		(glm::vec3 *)dL_dmean3D,
 		dL_dcolor,
