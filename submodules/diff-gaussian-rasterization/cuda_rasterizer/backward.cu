@@ -423,17 +423,17 @@ __device__ void computeASTuv(const glm::vec3 scale,
 	float dL_dy = 2 * x * (dL_dtu1 + dL_dtv0) - 2 * r * dL_dtu2 + 2 * z * dL_dtv2 - 4 * y * (dL_dtu0);
 	float dL_dz = 2 * r * (dL_dtu1 - dL_dtv0) + 2 * x * dL_dtu2 + 2 * y * dL_dtv2 - 4 * z * (dL_dtu0)-4 * z * (dL_dtv1);
 
-	*dL_dmeans.x += dL_dp0;
-	*dL_dmeans.y += dL_dp1;
-	*dL_dmeans.z += dL_dp2;
+	dL_dmeans->x += dL_dp0;
+	dL_dmeans->y += dL_dp1;
+	dL_dmeans->z += dL_dp2;
 
-	*dL_dscales.x += dL_dsu;
-	*dL_dscales.y += dL_dsv;
+	dL_dscales->x += dL_dsu;
+	dL_dscales->y += dL_dsv;
 
-	*dL_drots.x += dL_dr;
-	*dL_drots.y += dL_dx;
-	*dL_drots.z += dL_dy;
-	*dL_drots.w += dL_dz;
+	dL_drots->x += dL_dr;
+	dL_drots->y += dL_dx;
+	dL_drots->z += dL_dy;
+	dL_drots->w += dL_dz;
 }
 
 // Backward pass of the preprocessing steps, except
@@ -506,7 +506,7 @@ __global__ void preprocessCUDA(
 // Compute gradient updates due to computing covariance from scale/rotation
 #ifdef OURS
 	if (scales)
-		computeASTuv(scales + idx, scale_modifier, rotations[idx], m, view, dL_dA + idx * 9, dL_dmeans + idx, dL_dscale + idx, dL_drot + idx);
+		computeASTuv(scales[idx], scale_modifier, rotations[idx], m, view, dL_dA + idx * 9, dL_dmeans + idx, dL_dscale + idx, dL_drot + idx);
 #else
 	if (scales)
 		computeCov3D(idx, scales[idx], scale_modifier, rotations[idx], dL_dcov3D, dL_dscale, dL_drot);
