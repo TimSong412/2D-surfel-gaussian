@@ -558,7 +558,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	bool done = !inside;
 	int toDo = range.y - range.x;
 
-	__shared__ int collected_id[BLOCK_SIZE];
+	__shared__ uint32_t collected_id[BLOCK_SIZE];
 	__shared__ float2 collected_xy[BLOCK_SIZE];
 	__shared__ float4 collected_conic_opacity[BLOCK_SIZE];
 	__shared__ float collected_colors[C * BLOCK_SIZE];
@@ -607,7 +607,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const int progress = i * BLOCK_SIZE + block.thread_rank();
 		if (range.x + progress < range.y)
 		{
-			const int coll_id = point_list[range.y - progress - 1];
+			const uint32_t coll_id = point_list[range.y - progress - 1];
 			collected_id[block.thread_rank()] = coll_id;
 			collected_xy[block.thread_rank()] = points_xy_image[coll_id];
 			collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
@@ -649,8 +649,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			float hv_2 = -1.0f * collected_A[j * 9 + 4] + pix_cam.y * collected_A[j * 9 + 7];
 			float hv_4 = -1.0f * collected_A[j * 9 + 5] + pix_cam.y * collected_A[j * 9 + 8];
 
-			float u = (hu_2 * hv_4 - hu_4 * hv_2) / (hu_1 * hv_2 - hu_2 * hv_1);
-			float v = (hu_1 * hv_4 - hu_4 * hv_1) / (hu_2 * hv_1 - hu_1 * hv_2);
+			const float Denom = hu_1 * hv_2 - hu_2 * hv_1;
+
+			float u = (hu_2 * hv_4 - hu_4 * hv_2) / Denom;
+			float v = (hu_1 * hv_4 - hu_4 * hv_1) / Denom;
 
 			float G_u = exp(-0.5f * (u * u + v * v));
 
@@ -661,7 +663,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 #ifdef OURS
 			alpha = min(0.99f, con_o.w * G_hat);
-				
+
 #endif
 
 			T = T / (1.f - alpha);
@@ -672,7 +674,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// gradients w.r.t. alpha (blending factor for a Gaussian/pixel
 			// pair).
 			float dL_dopa = 0.0f;
-			const int global_id = collected_id[j];
+			const uint32_t global_id = collected_id[j];
 			for (int ch = 0; ch < C; ch++)
 			{
 				const float c = collected_colors[ch * BLOCK_SIZE + j];
@@ -711,7 +713,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dL_dopa += (-T_final / (1.f - alpha)) * bg_dot_dpixel;
 
 			// Helpful reusable temporary variables
-			
+
 			const float dL_dG = G_u > G_xc ? con_o.w * dL_dopa : 0.f;
 			// const float dL_dG = con_o.w * dL_dopa;
 			const float gdx = G * d.x;
@@ -723,32 +725,35 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float dG_du = -u * G_u;
 			const float dG_dv = -v * G_u;
 
-			const float du_dhu1 = hv_2 * (hu_4 * hv_2 - hu_2 * hv_4) / ((hu_1 * hv_2 - hu_2 * hv_1) * (hu_1 * hv_2 - hu_2 * hv_1));
-			const float du_dhu2 = hv_2 * (hu_1 * hv_4 - hu_4 * hv_1) / ((hu_2 * hv_1 - hu_1 * hv_2) * (hu_2 * hv_1 - hu_1 * hv_2));
-			const float du_dhu3 = hv_2 / (hu_2 * hv_1 - hu_1 * hv_2);
+			const float du_dhu1 = -u * hv_2 / Denom;
+			const float du_dhu2 = -v * hv_2 / Denom;
+			const float du_dhu3 = -hv_2 / Denom;
 
-			const float du_dhv1 = hu_2 * (hu_4 * hv_2 - hu_2 * hv_4) / ((hu_1 * hv_2 - hu_2 * hv_1) * (hu_1 * hv_2 - hu_2 * hv_1));
-			const float du_dhv2 = hu_2 * (hu_1 * hv_4 - hu_4 * hv_1) / ((hu_2 * hv_1 - hu_1 * hv_2) * (hu_2 * hv_1 - hu_1 * hv_2));
-			const float du_dhv3 = hu_2 / (hu_2 * hv_1 - hu_1 * hv_2);
+			const float du_dhv1 = u * hu_2 / Denom;
+			const float du_dhv2 = v * hu_2 / Denom;
+			const float du_dhv3 = hu_2 / Denom;
 
-			const float dv_dhu1 = hv_1 * (hu_2 * hv_4 - hu_4 * hv_2) / ((hu_1 * hv_2 - hu_2 * hv_1) * (hu_1 * hv_2 - hu_2 * hv_1));
-			const float dv_dhu2 = hv_1 * (hu_4 * hv_1 - hu_1 * hv_4) / ((hu_2 * hv_1 - hu_1 * hv_2) * (hu_2 * hv_1 - hu_1 * hv_2));
-			const float dv_dhu3 = hv_1 / (hu_2 * hv_1 - hu_1 * hv_2);
+			const float dv_dhu1 = u * hv_1 / Denom;
+			const float dv_dhu2 = v * hv_1 / Denom;
+			const float dv_dhu3 = hv_1 / Denom;
 
-			const float dv_dhv1 = hu_1 * (hu_2 * hv_4 - hu_4 * hv_2) / ((hu_1 * hv_2 - hu_2 * hv_1) * (hu_1 * hv_2 - hu_2 * hv_1));
-			const float dv_dhv2 = hu_1 * (hu_4 * hv_1 - hu_1 * hv_4) / ((hu_2 * hv_1 - hu_1 * hv_2) * (hu_2 * hv_1 - hu_1 * hv_2));
-			const float dv_dhv3 = hu_1 / (hu_2 * hv_1 - hu_1 * hv_2);
+			const float dv_dhv1 = -u * hu_1 / Denom;
+			const float dv_dhv2 = -v * hu_1 / Denom;
+			const float dv_dhv3 = -hu_1 / Denom;
 
 			glm::mat3 dL_dA_local;
+			// WARNING: transpose 
 			dL_dA_local[0][0] = dL_dG * (dG_du * (-du_dhu1) + dG_dv * (-dv_dhu1));
 			dL_dA_local[0][1] = dL_dG * (dG_du * (-du_dhv1) + dG_dv * (-dv_dhv1));
-			dL_dA_local[0][2] = dL_dG * (dG_du * (du_dhu1 * xy.x + du_dhv1 * xy.y) + dG_dv * (dv_dhu1 * xy.x + dv_dhv1 * xy.y));
-			dL_dA_local[1][0] = dL_dG * (dG_du * (-du_dhv2) + dG_dv * (-dv_dhv2));
-			dL_dA_local[1][1] = dL_dG * (dG_du * (-du_dhu2) + dG_dv * (-dv_dhu2));
-			dL_dA_local[1][2] = dL_dG * (dG_du * (du_dhu2 * xy.x + du_dhv2 * xy.y) + dG_dv * (dv_dhu2 * xy.x + dv_dhv2 * xy.y));
+			dL_dA_local[0][2] = dL_dG * (dG_du * (du_dhu1 * pix_cam.x + du_dhv1 * pix_cam.y) + dG_dv * (dv_dhu1 * pix_cam.x + dv_dhv1 * pix_cam.y));
+			dL_dA_local[1][0] = dL_dG * (dG_du * (-du_dhu2) + dG_dv * (-dv_dhu2));
+			dL_dA_local[1][1] = dL_dG * (dG_du * (-du_dhv2) + dG_dv * (-dv_dhv2));
+			dL_dA_local[1][2] = dL_dG * (dG_du * (du_dhu2 * pix_cam.x + du_dhv2 * pix_cam.y) + dG_dv * (dv_dhu2 * pix_cam.x + dv_dhv2 * pix_cam.y));
 			dL_dA_local[2][0] = dL_dG * (dG_du * (-du_dhu3) + dG_dv * (-dv_dhu3));
 			dL_dA_local[2][1] = dL_dG * (dG_du * (-du_dhv3) + dG_dv * (-dv_dhv3));
-			dL_dA_local[2][2] = dL_dG * (dG_du * (du_dhu3 * xy.x + du_dhv3 * xy.y) + dG_dv * (dv_dhu3 * xy.x + dv_dhv3 * xy.y));
+			dL_dA_local[2][2] = dL_dG * (dG_du * (du_dhu3 * pix_cam.x + du_dhv3 * pix_cam.y) + dG_dv * (dv_dhu3 * pix_cam.x + dv_dhv3 * pix_cam.y));
+
+			dL_dA_local = glm::transpose(dL_dA_local);
 
 			// Update gradients w.r.t. 2D mean position of the Gaussian
 			atomicAdd(&dL_dmean2D[global_id].x, dL_dG * dG_ddelx * ddelx_dx);
