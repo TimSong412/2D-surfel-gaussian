@@ -472,6 +472,25 @@ __global__ void preprocessCUDA(
 	float4 m_hom = transformPoint4x4(m, proj);
 	float m_w = 1.0f / (m_hom.w + 0.0000001f);
 
+#ifdef OURS
+	glm::vec3 dL_dmean;
+	const float px = view[0] * m.x + view[4] * m.y + view[8] * m.z + view[12];
+	const float py = view[1] * m.x + view[5] * m.y + view[9] * m.z + view[13];
+	const float pz = view[2] * m.x + view[6] * m.y + view[10] * m.z + view[14];
+	const float dpx_dPx = view[0] / pz - (px * view[2]) / (pz * pz);
+	const float dpx_dPy = view[4] / pz - (px * view[6]) / (pz * pz);
+	const float dpx_dPz = view[8] / pz - (px * view[10]) / (pz * pz);
+	const float dpy_dPx = view[1] / pz - (py * view[2]) / (pz * pz);
+	const float dpy_dPy = view[5] / pz - (py * view[6]) / (pz * pz);
+	const float dpy_dPz = view[9] / pz - (py * view[10]) / (pz * pz);
+
+	dL_dmean.x = dpx_dPx * dL_dmean2D[idx].x + dpy_dPx * dL_dmean2D[idx].y;
+	dL_dmean.y = dpx_dPy * dL_dmean2D[idx].x + dpy_dPy * dL_dmean2D[idx].y;
+	dL_dmean.z = dpx_dPz * dL_dmean2D[idx].x + dpy_dPz * dL_dmean2D[idx].y;
+
+	dL_dmeans[idx] += dL_dmean;
+
+#else
 	// Compute loss gradient w.r.t. 3D means due to gradients of 2D means
 	// from rendering procedure
 	glm::vec3 dL_dmean;
@@ -498,6 +517,7 @@ __global__ void preprocessCUDA(
 
 	// That's the third part of the mean gradient.
 	dL_dmeans[idx] += dL_dmean2;
+#endif
 
 	// Compute gradient updates due to computing colors from SHs
 	if (shs)
@@ -714,7 +734,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			// Helpful reusable temporary variables
 
-			const float dL_dG = G_u > G_xc ? con_o.w * dL_dopa : 0.f;
+			const float dL_dG = G_u >= G_xc ? con_o.w * dL_dopa : 0.f;
 			// const float dL_dG = con_o.w * dL_dopa;
 			const float gdx = G * d.x;
 			const float gdy = G * d.y;
@@ -722,8 +742,14 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float dG_ddely = -gdy * con_o.z - gdx * con_o.y;
 
 			// NEW
-			const float dG_du = -u * G_u;
-			const float dG_dv = -v * G_u;
+
+			// Margin cases
+			// dL_dpx = dL_dG * dG_dpx, dL_dG = con_o.w * dL_dopa
+			const float dL_dpx = G_xc > G_u ? (con_o.w * dL_dopa * 2 * G_hat * d.x * focal_x) : 0.f;
+			const float dL_dpy = G_xc > G_u ? (con_o.w * dL_dopa * 2 * G_hat * d.y * focal_y) : 0.f;
+
+			const float dG_du = -u * G_hat;
+			const float dG_dv = -v * G_hat;
 
 			const float du_dhu1 = -u * hv_2 / Denom;
 			const float du_dhu2 = -v * hv_2 / Denom;
@@ -755,6 +781,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			dL_dA_local = glm::transpose(dL_dA_local);
 
+#ifdef OURS
+			atomicAdd(&dL_dmean2D[global_id].x, dL_dpx);
+			atomicAdd(&dL_dmean2D[global_id].y, dL_dpy);
+#else
+
 			// Update gradients w.r.t. 2D mean position of the Gaussian
 			atomicAdd(&dL_dmean2D[global_id].x, dL_dG * dG_ddelx * ddelx_dx);
 			atomicAdd(&dL_dmean2D[global_id].y, dL_dG * dG_ddely * ddely_dy);
@@ -763,6 +794,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&dL_dconic2D[global_id].x, -0.5f * gdx * d.x * dL_dG);
 			atomicAdd(&dL_dconic2D[global_id].y, -0.5f * gdx * d.y * dL_dG);
 			atomicAdd(&dL_dconic2D[global_id].w, -0.5f * gdy * d.y * dL_dG);
+
+#endif
 
 			// Update gradients w.r.t. opacity of the Gaussian
 			atomicAdd(&(dL_dopacity[global_id]), G * dL_dopa);
