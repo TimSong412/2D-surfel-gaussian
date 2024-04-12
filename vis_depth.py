@@ -27,7 +27,8 @@ from wis3d import Wis3D
 
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background):
-    v3d = Wis3D("dbg", "vis_depth_normal_capsule", "xyz")
+    v3d = Wis3D("dbg", model_path[-5:], "xyz")
+    print("wis3d dir: ", model_path[-5:])
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
 
@@ -90,6 +91,7 @@ def visualize(rendering,depth,radii,view,idx, depth_path, normal=None, vis: Wis3
     H,W=rendering.shape[1:]
     fx=fov2focal(view.FoVx, W)
     fy=fov2focal(view.FoVy, H)
+    print("fx: ", fx, "fy: ", fy)
     cx=W/2
     cy=H/2
 

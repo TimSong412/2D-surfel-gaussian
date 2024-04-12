@@ -742,7 +742,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float dv_dhv3 = -hu_1 / Denom;
 
 			glm::mat3 dL_dA_local;
-			// WARNING: transpose 
+			// WARNING: transpose
 			dL_dA_local[0][0] = dL_dG * (dG_du * (-du_dhu1) + dG_dv * (-dv_dhu1));
 			dL_dA_local[0][1] = dL_dG * (dG_du * (-du_dhv1) + dG_dv * (-dv_dhv1));
 			dL_dA_local[0][2] = dL_dG * (dG_du * (du_dhu1 * pix_cam.x + du_dhv1 * pix_cam.y) + dG_dv * (dv_dhu1 * pix_cam.x + dv_dhv1 * pix_cam.y));
