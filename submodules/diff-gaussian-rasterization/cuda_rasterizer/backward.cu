@@ -341,9 +341,9 @@ __device__ void computeASTuv(const glm::vec3 scale,
 							 const float3 p_k,
 							 const float *view_matrix,
 							 const float *dL_dA,
-							 glm::vec3 &dL_dmeans,
-							 glm::vec3 &dL_dscales,
-							 glm::vec4 &dL_drots)
+							 glm::vec3 *dL_dmeans,
+							 glm::vec3 *dL_dscales,
+							 glm::vec4 *dL_drots)
 {
 	glm::vec4 q = rot; // / glm::length(rot);
 	float r = q.x;
@@ -423,17 +423,17 @@ __device__ void computeASTuv(const glm::vec3 scale,
 	float dL_dy = 2 * x * (dL_dtu1 + dL_dtv0) - 2 * r * dL_dtu2 + 2 * z * dL_dtv2 - 4 * y * (dL_dtu0);
 	float dL_dz = 2 * r * (dL_dtu1 - dL_dtv0) + 2 * x * dL_dtu2 + 2 * y * dL_dtv2 - 4 * z * (dL_dtu0)-4 * z * (dL_dtv1);
 
-	dL_dmeans.x += dL_dp0;
-	dL_dmeans.y += dL_dp1;
-	dL_dmeans.z += dL_dp2;
+	*dL_dmeans.x += dL_dp0;
+	*dL_dmeans.y += dL_dp1;
+	*dL_dmeans.z += dL_dp2;
 
-	dL_dscales.x += dL_dsu;
-	dL_dscales.y += dL_dsv;
+	*dL_dscales.x += dL_dsu;
+	*dL_dscales.y += dL_dsv;
 
-	dL_drots.x += dL_dr;
-	dL_drots.y += dL_dx;
-	dL_drots.z += dL_dy;
-	dL_drots.w += dL_dz;
+	*dL_drots.x += dL_dr;
+	*dL_drots.y += dL_dx;
+	*dL_drots.z += dL_dy;
+	*dL_drots.w += dL_dz;
 }
 
 // Backward pass of the preprocessing steps, except
@@ -506,7 +506,7 @@ __global__ void preprocessCUDA(
 // Compute gradient updates due to computing covariance from scale/rotation
 #ifdef OURS
 	if (scales)
-		computeASTuv(scales[idx], scale_modifier, rotations[idx], m, view, dL_dA + idx * 9, dL_dmeans[idx], dL_dscale[idx], dL_drot[idx]);
+		computeASTuv(scales + idx, scale_modifier, rotations[idx], m, view, dL_dA + idx * 9, dL_dmeans + idx, dL_dscale + idx, dL_drot + idx);
 #else
 	if (scales)
 		computeCov3D(idx, scales[idx], scale_modifier, rotations[idx], dL_dcov3D, dL_dscale, dL_drot);
@@ -661,6 +661,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 #ifdef OURS
 			alpha = min(0.99f, con_o.w * G_hat);
+				
 #endif
 
 			T = T / (1.f - alpha);
@@ -710,7 +711,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dL_dopa += (-T_final / (1.f - alpha)) * bg_dot_dpixel;
 
 			// Helpful reusable temporary variables
-			const float dL_dG = con_o.w * dL_dopa;
+			
+			const float dL_dG = G_u > G_xc ? con_o.w * dL_dopa : 0.f;
+			// const float dL_dG = con_o.w * dL_dopa;
 			const float gdx = G * d.x;
 			const float gdy = G * d.y;
 			const float dG_ddelx = -gdx * con_o.x - gdy * con_o.y;
