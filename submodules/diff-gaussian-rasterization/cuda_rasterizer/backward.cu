@@ -453,6 +453,7 @@ __global__ void preprocessCUDA(
 	const float *proj,
 	const glm::vec3 *campos,
 	const float *dL_dA,
+	const float2 *dL_dc_margin,
 	const float3 *dL_dmean2D,
 	glm::vec3 *dL_dmeans,
 	float *dL_dcolor,
@@ -484,11 +485,11 @@ __global__ void preprocessCUDA(
 	const float dpy_dPy = view[5] / pz - (py * view[6]) / (pz * pz);
 	const float dpy_dPz = view[9] / pz - (py * view[10]) / (pz * pz);
 
-	dL_dmean.x = dpx_dPx * dL_dmean2D[idx].x + dpy_dPx * dL_dmean2D[idx].y;
-	dL_dmean.y = dpx_dPy * dL_dmean2D[idx].x + dpy_dPy * dL_dmean2D[idx].y;
-	dL_dmean.z = dpx_dPz * dL_dmean2D[idx].x + dpy_dPz * dL_dmean2D[idx].y;
+	dL_dmean.x = dpx_dPx * dL_dc_margin[idx].x + dpy_dPx * dL_dc_margin[idx].y;
+	dL_dmean.y = dpx_dPy * dL_dc_margin[idx].x + dpy_dPy * dL_dc_margin[idx].y;
+	dL_dmean.z = dpx_dPz * dL_dc_margin[idx].x + dpy_dPz * dL_dc_margin[idx].y;
 
-	// dL_dmeans[idx] += dL_dmean;
+	dL_dmeans[idx] += dL_dmean;
 
 #else
 	// Compute loss gradient w.r.t. 3D means due to gradients of 2D means
@@ -557,7 +558,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		float *__restrict__ dL_dopacity,
 		float *__restrict__ dL_dcolors,
 		float *__restrict__ dL_ddepths,
-		float *__restrict__ dL_dA)
+		float *__restrict__ dL_dA,
+		float2 *__restrict__ dL_dc_margin)
 {
 	// We rasterize again. Compute necessary block info.
 	auto block = cg::this_thread_block();
@@ -747,8 +749,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			// Margin cases
 			// dL_dpx = dL_dG * dG_dpx, dL_dG = con_o.w * dL_dopa
-			const float dL_dpx = G_xc > G_u ? (con_o.w * dL_dopa * 2 * G_hat * d.x * focal_x) : 0.f;
-			const float dL_dpy = G_xc > G_u ? (con_o.w * dL_dopa * 2 * G_hat * d.y * focal_y) : 0.f;
+			const float dL_dpx_margin = G_xc > G_u ? (con_o.w * dL_dopa * 2 * G_hat * d.x * focal_x) : 0.f;
+			const float dL_dpy_margin = G_xc > G_u ? (con_o.w * dL_dopa * 2 * G_hat * d.y * focal_y) : 0.f;
 
 			const float dG_du = -u * G_hat;
 			const float dG_dv = -v * G_hat;
@@ -784,8 +786,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dL_dA_local = glm::transpose(dL_dA_local);
 
 #ifdef OURS
-			// atomicAdd(&dL_dmean2D[global_id].x, dL_dpx);
-			// atomicAdd(&dL_dmean2D[global_id].y, dL_dpy);
+			atomicAdd(&dL_dc_margin[global_id].x, dL_dpx_margin);
+			atomicAdd(&dL_dc_margin[global_id].y, dL_dpy_margin);
 			const float du_dx = (du_dhu1 * collected_A[j * 9 + 6] + du_dhu2 * collected_A[j * 9 + 7] + du_dhu3 * collected_A[j * 9 + 8]);
 			const float dv_dx = (dv_dhu1 * collected_A[j * 9 + 6] + dv_dhu2 * collected_A[j * 9 + 7] + dv_dhu3 * collected_A[j * 9 + 8]);
 			const float du_dy = (du_dhv1 * collected_A[j * 9 + 6] + du_dhv2 * collected_A[j * 9 + 7] + du_dhv3 * collected_A[j * 9 + 8]);
@@ -794,6 +796,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float dL_dy = 0.5 * H * (1 / focal_y) * dL_dG * (dG_du * du_dy + dG_dv * dv_dy);
 			atomicAdd(&dL_dmean2D[global_id].x, dL_dx);
 			atomicAdd(&dL_dmean2D[global_id].y, dL_dy);
+			
+			// Update gradients w.r.t. opacity of the Gaussian
+			atomicAdd(&(dL_dopacity[global_id]), G_hat * dL_dopa);
 #else
 
 			// Update gradients w.r.t. 2D mean position of the Gaussian
@@ -805,10 +810,12 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&dL_dconic2D[global_id].y, -0.5f * gdx * d.y * dL_dG);
 			atomicAdd(&dL_dconic2D[global_id].w, -0.5f * gdy * d.y * dL_dG);
 
-#endif
-
 			// Update gradients w.r.t. opacity of the Gaussian
 			atomicAdd(&(dL_dopacity[global_id]), G * dL_dopa);
+
+#endif
+
+			
 
 			// NEW
 			// dL_dA: N*9 array
@@ -841,6 +848,7 @@ void BACKWARD::preprocess(
 	const float tan_fovx, float tan_fovy,
 	const glm::vec3 *campos,
 	const float *dL_dA,
+	const float2 *dL_dc_margin,
 	const float3 *dL_dmean2D,
 	const float *dL_dconic,
 	glm::vec3 *dL_dmean3D,
@@ -887,6 +895,7 @@ void BACKWARD::preprocess(
 		projmatrix,
 		campos,
 		dL_dA,
+		dL_dc_margin,
 		(float3 *)dL_dmean2D,
 		(glm::vec3 *)dL_dmean3D,
 		dL_dcolor,
@@ -919,7 +928,8 @@ void BACKWARD::render(
 	float *dL_dopacity,
 	float *dL_dcolors,
 	float *dL_ddepths,
-	float *dL_dA)
+	float *dL_dA,
+	float2 *dL_dc_margin)
 {
 	renderCUDA<NUM_CHANNELS><<<grid, block>>>(
 		ranges,
@@ -942,5 +952,6 @@ void BACKWARD::render(
 		dL_dopacity,
 		dL_dcolors,
 		dL_ddepths,
-		dL_dA);
+		dL_dA,
+		dL_dc_margin);
 }

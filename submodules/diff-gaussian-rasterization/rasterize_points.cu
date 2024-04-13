@@ -172,6 +172,7 @@ RasterizeGaussiansBackwardCUDA(
 	torch::Tensor dL_dscales = torch::zeros({P, 3}, means3D.options());
 	torch::Tensor dL_drotations = torch::zeros({P, 4}, means3D.options());
 	torch::Tensor dL_dA = torch::zeros({P, 9}, means3D.options());
+	torch::Tensor dL_dc_margin = torch::zeros({P, 2}, means3D.options());
 
 	if (P != 0)
 	{
@@ -209,6 +210,7 @@ RasterizeGaussiansBackwardCUDA(
 											 dL_dscales.contiguous().data<float>(),
 											 dL_drotations.contiguous().data<float>(),
 											 dL_dA.contiguous().data<float>(),
+											 dL_dc_margin.contiguous().data<float>(),
 											 debug);
 	}
 

@@ -89,6 +89,7 @@ namespace CudaRasterizer
 			float* dL_dscale,
 			float* dL_drot,
 			float* dL_dA,
+			float* dL_dc_margin,
 			bool debug);
 	};
 };

@@ -392,6 +392,7 @@ void CudaRasterizer::Rasterizer::backward(
 	float *dL_dscale,
 	float *dL_drot,
 	float *dL_dA,
+	float *dL_dc_margin,
 	bool debug)
 {
 	GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
@@ -437,7 +438,8 @@ void CudaRasterizer::Rasterizer::backward(
 				   dL_dopacity,
 				   dL_dcolor,
 				   dL_ddepth, 
-				   dL_dA),
+				   dL_dA,
+				   (float2 *)dL_dc_margin),
 			   debug)
 
 	// Take care of the rest of preprocessing. Was the precomputed covariance
@@ -459,6 +461,7 @@ void CudaRasterizer::Rasterizer::backward(
 									tan_fovx, tan_fovy,
 									(glm::vec3 *)campos,
 									dL_dA,
+									(float2 *)dL_dc_margin,
 									(float3 *)dL_dmean2D,
 									dL_dconic,
 									(glm::vec3 *)dL_dmean3D,

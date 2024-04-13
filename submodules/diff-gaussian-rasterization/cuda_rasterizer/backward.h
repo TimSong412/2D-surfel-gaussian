@@ -42,7 +42,8 @@ namespace BACKWARD
 		float *dL_dopacity,
 		float *dL_dcolors,
 		float *dL_ddepths,
-		float *dL_dA);
+		float *dL_dA,
+		float2 *dL_dc_margin);
 
 	void preprocess(
 		int P, int D, int M,
@@ -60,6 +61,7 @@ namespace BACKWARD
 		const float tan_fovx, float tan_fovy,
 		const glm::vec3 *campos,
 		const float *dL_dA,
+		const float2 *dL_dc_margin,
 		const float3 *dL_dmean2D,
 		const float *dL_dconics,
 		glm::vec3 *dL_dmeans,
