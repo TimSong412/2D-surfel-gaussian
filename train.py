@@ -10,6 +10,7 @@
 #
 
 import os
+import time
 import torch
 from random import randint
 from utils.loss_utils import l1_loss, ssim
@@ -126,6 +127,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             if iteration < opt.iterations:
                 gaussians.optimizer.step()
                 gaussians.optimizer.zero_grad(set_to_none = True)
+                # gaussians.zero_z()
 
             if (iteration in checkpoint_iterations):
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
@@ -137,6 +139,7 @@ def prepare_output_and_logger(args):
             unique_str=os.getenv('OAR_JOB_ID')
         else:
             unique_str = str(uuid.uuid4())
+        unique_str = time.strftime("%m%d-%H%M%S")
         args.model_path = os.path.join("./output/", unique_str[0:10])
         
     # Set up output folder
@@ -158,6 +161,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
         tb_writer.add_scalar('train_loss_patches/l1_loss', Ll1.item(), iteration)
         tb_writer.add_scalar('train_loss_patches/total_loss', loss.item(), iteration)
         tb_writer.add_scalar('iter_time', elapsed, iteration)
+        tb_writer.add_scalar('xyz_grad_norm_mean', scene.gaussians.get_xyz.grad.norm(dim=1).mean(), iteration)
 
     # Report test and samples of training set
     if iteration in testing_iterations:
@@ -200,8 +204,8 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[3_000, 30_000])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[3_000, 30_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[i*1000 for i in range(30)])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[i*1000 for i in range(30)])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
