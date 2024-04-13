@@ -660,8 +660,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			const float G = exp(power);
 			float alpha = min(0.99f, con_o.w * G);
-			if (alpha < 1.0f / 255.0f)
-				continue;
+
 
 			float hu_1 = -1.0f * collected_A[j * 9 + 0] + pix_cam.x * collected_A[j * 9 + 6];
 			float hu_2 = -1.0f * collected_A[j * 9 + 1] + pix_cam.x * collected_A[j * 9 + 7];
@@ -687,6 +686,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			alpha = min(0.99f, con_o.w * G_hat);
 
 #endif
+
+			if (alpha < 1.0f / 255.0f)
+				continue;
 
 			T = T / (1.f - alpha);
 			const float dchannel_dcolor = alpha * T;
