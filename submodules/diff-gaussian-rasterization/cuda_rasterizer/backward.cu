@@ -488,7 +488,7 @@ __global__ void preprocessCUDA(
 	dL_dmean.y = dpx_dPy * dL_dmean2D[idx].x + dpy_dPy * dL_dmean2D[idx].y;
 	dL_dmean.z = dpx_dPz * dL_dmean2D[idx].x + dpy_dPz * dL_dmean2D[idx].y;
 
-	dL_dmeans[idx] += dL_dmean;
+	// dL_dmeans[idx] += dL_dmean;
 
 #else
 	// Compute loss gradient w.r.t. 3D means due to gradients of 2D means
@@ -733,9 +733,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dL_dopa += (-T_final / (1.f - alpha)) * bg_dot_dpixel;
 
 			// Helpful reusable temporary variables
-
+#ifdef OURS
 			const float dL_dG = G_u >= G_xc ? con_o.w * dL_dopa : 0.f;
-			// const float dL_dG = con_o.w * dL_dopa;
+#else
+			const float dL_dG = con_o.w * dL_dopa;
+#endif
 			const float gdx = G * d.x;
 			const float gdy = G * d.y;
 			const float dG_ddelx = -gdx * con_o.x - gdy * con_o.y;
@@ -782,8 +784,16 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dL_dA_local = glm::transpose(dL_dA_local);
 
 #ifdef OURS
-			atomicAdd(&dL_dmean2D[global_id].x, dL_dpx);
-			atomicAdd(&dL_dmean2D[global_id].y, dL_dpy);
+			// atomicAdd(&dL_dmean2D[global_id].x, dL_dpx);
+			// atomicAdd(&dL_dmean2D[global_id].y, dL_dpy);
+			const float du_dx = (du_dhu1 * collected_A[j * 9 + 6] + du_dhu2 * collected_A[j * 9 + 7] + du_dhu3 * collected_A[j * 9 + 8]);
+			const float dv_dx = (dv_dhu1 * collected_A[j * 9 + 6] + dv_dhu2 * collected_A[j * 9 + 7] + dv_dhu3 * collected_A[j * 9 + 8]);
+			const float du_dy = (du_dhv1 * collected_A[j * 9 + 6] + du_dhv2 * collected_A[j * 9 + 7] + du_dhv3 * collected_A[j * 9 + 8]);
+			const float dv_dy = (dv_dhv1 * collected_A[j * 9 + 6] + dv_dhv2 * collected_A[j * 9 + 7] + dv_dhv3 * collected_A[j * 9 + 8]);
+			const float dL_dx = 0.5 * W * (1 / focal_x) * dL_dG * (dG_du * du_dx + dG_dv * dv_dx);
+			const float dL_dy = 0.5 * H * (1 / focal_y) * dL_dG * (dG_du * du_dy + dG_dv * dv_dy);
+			atomicAdd(&dL_dmean2D[global_id].x, dL_dx);
+			atomicAdd(&dL_dmean2D[global_id].y, dL_dy);
 #else
 
 			// Update gradients w.r.t. 2D mean position of the Gaussian
@@ -841,10 +851,11 @@ void BACKWARD::preprocess(
 	glm::vec3 *dL_dscale,
 	glm::vec4 *dL_drot)
 {
-	// Propagate gradients for the path of 2D conic matrix computation.
-	// Somewhat long, thus it is its own kernel rather than being part of
-	// "preprocess". When done, loss gradient w.r.t. 3D means has been
-	// modified and gradient w.r.t. 3D covariance matrix has been computed.
+// Propagate gradients for the path of 2D conic matrix computation.
+// Somewhat long, thus it is its own kernel rather than being part of
+// "preprocess". When done, loss gradient w.r.t. 3D means has been
+// modified and gradient w.r.t. 3D covariance matrix has been computed.
+#ifndef OURS
 	computeCov2DCUDA<<<(P + 255) / 256, 256>>>(
 		P,
 		means3D,
@@ -858,6 +869,7 @@ void BACKWARD::preprocess(
 		dL_dconic,
 		(float3 *)dL_dmean3D,
 		dL_dcov3D);
+#endif
 
 	// Propagate gradients for remaining steps: finish 3D mean gradients,
 	// propagate color gradients to SH (if desireD), propagate 3D covariance
