@@ -655,13 +655,15 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float2 xy = collected_xy[j];
 			const float2 d = {xy.x - pixf.x, xy.y - pixf.y};
 			const float4 con_o = collected_conic_opacity[j];
+
+#ifndef OURS
 			const float power = -0.5f * (con_o.x * d.x * d.x + con_o.z * d.y * d.y) - con_o.y * d.x * d.y;
 			if (power > 0.0f)
 				continue;
 
 			const float G = exp(power);
 			float alpha = min(0.99f, con_o.w * G);
-
+#endif
 
 			float hu_1 = -1.0f * collected_A[j * 9 + 0] + pix_cam.x * collected_A[j * 9 + 6];
 			float hu_2 = -1.0f * collected_A[j * 9 + 1] + pix_cam.x * collected_A[j * 9 + 7];
@@ -674,7 +676,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float Denom = hu_1 * hv_2 - hu_2 * hv_1;
 
 			float u = (hu_2 * hv_4 - hu_4 * hv_2) / Denom;
-			float v = (hu_1 * hv_4 - hu_4 * hv_1) / Denom;
+			float v = (hu_4 * hv_1 - hu_1 * hv_4) / Denom;
 
 			float G_u = exp(-0.5f * (u * u + v * v));
 
@@ -684,7 +686,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// G_u = G_xc;
 
 #ifdef OURS
-			alpha = min(0.99f, con_o.w * G_hat);
+			float alpha = min(0.99f, con_o.w * G_hat);
 
 #endif
 
@@ -742,12 +744,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float dL_dG = G_u >= G_xc ? con_o.w * dL_dopa : 0.f;
 #else
 			const float dL_dG = con_o.w * dL_dopa;
-#endif
 			const float gdx = G * d.x;
 			const float gdy = G * d.y;
 			const float dG_ddelx = -gdx * con_o.x - gdy * con_o.y;
 			const float dG_ddely = -gdy * con_o.z - gdx * con_o.y;
-
+#endif
 			// NEW
 
 			// Margin cases
@@ -799,7 +800,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float dL_dy = 0.5 * H * (1 / focal_y) * dL_dG * (dG_du * du_dy + dG_dv * dv_dy);
 			atomicAdd(&dL_dmean2D[global_id].x, dL_dx);
 			atomicAdd(&dL_dmean2D[global_id].y, dL_dy);
-			
+
 			// Update gradients w.r.t. opacity of the Gaussian
 			atomicAdd(&(dL_dopacity[global_id]), G_hat * dL_dopa);
 #else
@@ -817,8 +818,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&(dL_dopacity[global_id]), G * dL_dopa);
 
 #endif
-
-			
 
 			// NEW
 			// dL_dA: N*9 array

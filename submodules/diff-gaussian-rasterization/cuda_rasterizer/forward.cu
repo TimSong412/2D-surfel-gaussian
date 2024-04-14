@@ -469,8 +469,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			float hv_2 = -1.0f * collected_A[j * 9 + 4] + pix_cam.y * collected_A[j * 9 + 7];
 			float hv_4 = -1.0f * collected_A[j * 9 + 5] + pix_cam.y * collected_A[j * 9 + 8];
 
-			float u = (hu_2 * hv_4 - hu_4 * hv_2) / (hu_1 * hv_2 - hu_2 * hv_1);
-			float v = (hu_1 * hv_4 - hu_4 * hv_1) / (hu_2 * hv_1 - hu_1 * hv_2);
+			const float Denom = hu_1 * hv_2 - hu_2 * hv_1;
+
+			float u = (hu_2 * hv_4 - hu_4 * hv_2) / Denom;
+			float v = (hu_4 * hv_1 - hu_1 * hv_4) / Denom;
 
 			float G_u = exp(-0.5f * (u * u + v * v));
 
