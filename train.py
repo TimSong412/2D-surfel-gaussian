@@ -140,7 +140,7 @@ def prepare_output_and_logger(args):
         else:
             unique_str = str(uuid.uuid4())
         unique_str = time.strftime("%m%d-%H%M%S") 
-        args.model_path = os.path.join("./output/", unique_str[0:10] + "-2D")
+        args.model_path = os.path.join("./output/", unique_str[0:10] + "-2D-" + args.source_path.split("/")[-1])
         
     # Set up output folder
     print("Output folder: {}".format(args.model_path))
