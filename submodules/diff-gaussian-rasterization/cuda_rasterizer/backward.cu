@@ -418,10 +418,10 @@ __device__ void computeASTuv(const glm::vec3 scale,
 	float dL_dp2 = dL_dA[2] * R[0][2] + dL_dA[5] * R[1][2] + dL_dA[8] * R[2][2];
 
 	// compute gradient through quaternion
-	float dL_dr = 2 * z * (dL_dtu1 - dL_dtv0) - 2 * y * dL_dtu2 + 2 * x * dL_dtv2;
-	float dL_dx = 2 * y * (dL_dtu1 + dL_dtv0) + 2 * z * dL_dtu2 + 2 * r * dL_dtv2 - 4 * x * (dL_dtv1);
-	float dL_dy = 2 * x * (dL_dtu1 + dL_dtv0) - 2 * r * dL_dtu2 + 2 * z * dL_dtv2 - 4 * y * (dL_dtu0);
-	float dL_dz = 2 * r * (dL_dtu1 - dL_dtv0) + 2 * x * dL_dtu2 + 2 * y * dL_dtv2 - 4 * z * (dL_dtu0)-4 * z * (dL_dtv1);
+	const float dL_dr = 2.0f * (z * (dL_dtu1 - dL_dtv0) - y * dL_dtu2 + x * dL_dtv2);
+	const float dL_dx = 2.0f * (y * (dL_dtu1 + dL_dtv0) + z * dL_dtu2 + r * dL_dtv2 - 2.0f * x * dL_dtv1);
+	const float dL_dy = 2.0f * (x * (dL_dtu1 + dL_dtv0) - r * dL_dtu2 + z * dL_dtv2 - 2.0f * y * dL_dtu0);
+	const float dL_dz = 2.0f * (r * (dL_dtu1 - dL_dtv0) + x * dL_dtu2 + y * dL_dtv2 - 2.0f * z * (dL_dtu0 + dL_dtv1));
 
 	dL_dmeans->x += dL_dp0;
 	dL_dmeans->y += dL_dp1;
@@ -429,6 +429,7 @@ __device__ void computeASTuv(const glm::vec3 scale,
 
 	dL_dscales->x += dL_dsu;
 	dL_dscales->y += dL_dsv;
+	// dL_dscales->z += 0;
 
 	dL_drots->x += dL_dr;
 	dL_drots->y += dL_dx;

@@ -163,6 +163,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
         tb_writer.add_scalar('iter_time', elapsed, iteration)
         tb_writer.add_scalar('xyz_grad_norm_mean', scene.gaussians.get_xyz.grad.norm(dim=1).mean(), iteration)
         tb_writer.add_scalar('total_points', scene.gaussians.get_xyz.shape[0], iteration)
+        tb_writer.add_scalar('total_quat_err', abs(scene.gaussians._rotation.norm(dim=1)-1).sum(), iteration)
         if hasattr(scene.gaussians, "clone_pts_num"):
             tb_writer.add_scalar('densify/clone', scene.gaussians.clone_pts_num, iteration)
             tb_writer.add_scalar('densify/split', scene.gaussians.split_pts_num, iteration)
