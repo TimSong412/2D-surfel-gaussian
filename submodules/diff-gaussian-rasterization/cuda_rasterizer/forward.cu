@@ -188,9 +188,7 @@ __device__ void computeCov3D(const glm::vec3 scale, float mod, const glm::vec4 r
 	S[1][1] = mod * scale.y;
 	S[2][2] = mod * scale.z;
 
-#ifdef OURS
 	S[2][2] = mod * min(glm::abs(scale.x), glm::abs(scale.y)) * 0.1;
-#endif
 
 	// Normalize quaternion to get valid rotation
 	glm::vec4 q = rot; // / glm::length(rot);
@@ -486,9 +484,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			G_u = max(G_u, G_xc);
 			// G_u = G_xc;
 
-#ifdef OURS
 			alpha = min(0.99f, con_o.w * G_u);
-#endif
 
 			if (alpha < 1.0f / 255.0f)
 				continue;
@@ -504,7 +500,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
 			weight += alpha * T;
 
-#ifdef OURS
 			if (T >= 0.5f)
 			{
 				D = intersect_c.z;
@@ -516,9 +511,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				// D = depths[collected_id[j]];
 				// n_i = {collected_normal[j * 3 + 0], collected_normal[j * 3 + 1], collected_normal[j * 3 + 2]};
 			}
-#else
-			D += depths[collected_id[j]] * alpha * T;
-#endif
 
 			T = test_T;
 
