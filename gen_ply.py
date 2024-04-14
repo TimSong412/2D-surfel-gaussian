@@ -185,7 +185,9 @@ def gen_cube():
 
 def gen_capsule():
     # generate a cube gaussian spalting ply file
-    mesh = trimesh.creation.capsule(0.2, 0.5)
+    # mesh = trimesh.creation.capsule(0.2, 0.5)
+    mesh = trimesh.primitives.Capsule(radius=0.2, height=0.1)
+    mesh = mesh.subdivide()
     mesh = mesh.subdivide()
     mesh = mesh.subdivide()
     mesh = mesh.subdivide()
@@ -254,6 +256,74 @@ def gen_capsule():
     PlyData([el]).write("capsule_gaussian.ply")
 
 
+def gen_sphere():
+    # generate a cube gaussian spalting ply file
+    # mesh = trimesh.creation.capsule(0.2, 0.5)
+    mesh = trimesh.primitives.Sphere(radius=0.2, subdivisions=8)
+    mesh = mesh.subdivide()
+    # save ply file
+    mesh.export("sphere.ply")
+    print("vetices: ", len(mesh.vertices))
+
+    # sample part of the vertex
+    
+    select_id = np.random.choice(len(mesh.vertices), 100000)
+    # select_id = [i for i in range(0, 1000, 5)]
+
+    select_vert = mesh.vertices[select_id]
+    select_norm = mesh.vertex_normals[select_id]
+    # add to wis3d
+    print("Add to Wis3D")
+    v3d = Wis3D("dbg", "vis_normal_sphere", "xyz")
+    v3d.add_mesh(mesh, "sphere")
+    # add vertex normal
+    
+    v3d.add_lines(np.array(select_vert), np.array(select_vert + select_norm*0.1), name=f"normals")
+
+    # create gaussian splatting ply
+    print("Create Gaussian Splatting Ply")
+    list_attributes = ["x", "y", "z", "nx", "ny", "nz"]
+    list_attributes += [f"f_dc_{i}" for i in range(3)]
+    # list_attributes += [f"f_rest_{i}" for i in range(45)]
+    list_attributes += ["opacity"]
+    list_attributes += [f"scale_{i}" for i in range(3)]
+    list_attributes += [f"rot_{i}" for i in range(4)]
+
+    dtype_full = [(attr, 'f4') for attr in list_attributes]
+
+    xyz = np.array(select_vert) * 20
+    normals = np.array(select_norm)
+    # generate color in N * [0, 1]
+    # f_dc = np.random.uniform(0, 1, (len(xyz), 3))
+    f_dc = np.zeros((len(xyz), 3))
+
+    max_z = xyz[:, 2].max()
+    min_z = xyz[:, 2].min()
+    for i, z in enumerate(xyz[:, 2]):
+        relative_z = (z - min_z) / (max_z - min_z)
+        color = plt.cm.hsv(relative_z)[:3]
+        f_dc[i] = color
+
+    f_rest = np.zeros((len(xyz), 45))
+    opacities = np.ones((len(xyz), 1))*10
+    scale = np.random.uniform(-3, -2, (len(xyz), 3))
+    scale[:, 2] = -3
+    # generate quaternion based on normal
+    rotation, norm1, norm2 = normal2quat(normals)
+
+    # add new axies to vis3d
+    norm1 *= scale[:, 0:1]
+    norm2 *= scale[:, 1:2]
+    v3d.add_lines(select_vert, select_vert + norm1, name=f"norm1")
+    v3d.add_lines(select_vert, select_vert + norm2, name=f"norm2")
+
+    elements = np.empty(xyz.shape[0], dtype=dtype_full)
+    attributes = np.concatenate((xyz, normals, f_dc, opacities, scale, rotation), axis=1)
+    elements[:] = list(map(tuple, attributes))
+    el = PlyElement.describe(elements, 'vertex')
+    PlyData([el]).write("sphere_gaussian.ply")
+
+
 def resize_camera():
     with open("output/cube/cameras.json", "r") as f:
         cameras = json.load(f)  
@@ -266,6 +336,8 @@ def resize_camera():
 
 if __name__ == "__main__":
     # gen_cube()
-    gen_capsule()
+    # gen_capsule()
+    gen_sphere()
     print("Done!")
     # resize_camera()
+    
