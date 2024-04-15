@@ -365,8 +365,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		float *__restrict__ out_color,
 		float *__restrict__ out_depth,
 		float *__restrict__ out_normal,
-		float *__restrict__ point_omega,
-		float *__restrict__ point_z)
+		float *__restrict__ ray_R,
+		float *__restrict__ ray_S)
 {
 	// Identify current tile and associated min/max pixel range.
 	auto block = cg::this_thread_block();
@@ -397,8 +397,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	__shared__ float collected_A[BLOCK_SIZE * 9];
 	__shared__ float collected_STuv[BLOCK_SIZE * 6];
 	__shared__ float collected_origin[BLOCK_SIZE * 3];
-	__shared__ float3 collected_normal[BLOCK_SIZE];
-	__shared__ uint32_t collected_binning_id[BLOCK_SIZE];
+	__shared__ float3 collected_normal[BLOCK_SIZE];	
 	// __shared__ float collected_normal[BLOCK_SIZE * 3];
 
 	// Initialize helper variables
@@ -411,6 +410,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float3 intersect_w;
 	float3 intersect_c;
 	float3 normal_intersect;
+	float R_acc = 0.0f;
+	float S_acc = 0.0f;
+	float last_omega = 0.0f;
+	float last_z = 0.0f;
 
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
@@ -427,7 +430,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		{
 			int coll_id = point_list[range.x + progress];
 			collected_id[block.thread_rank()] = coll_id;
-			collected_binning_id[block.thread_rank()] = (range.x + progress) * BLOCK_SIZE + block.thread_rank();
+			
 			collected_xy[block.thread_rank()] = points_xy_image[coll_id];
 			collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
 			for (int j = 0; j < 9; j++)
@@ -451,16 +454,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			float2 xy = collected_xy[j];
 			float2 d = {xy.x - pixf.x, xy.y - pixf.y};
 			float4 con_o = collected_conic_opacity[j];
-			uint32_t binning_id = collected_binning_id[j];
-			float power = -0.5f * (con_o.x * d.x * d.x + con_o.z * d.y * d.y) - con_o.y * d.x * d.y;
-			if (power > 0.0f)
-				continue;
+			
 
-			// Eq. (2) from 3D Gaussian splatting paper.
-			// Obtain alpha by multiplying with Gaussian opacity
-			// and its exponential falloff from mean.
-			// Avoid numerical instabilities (see paper appendix).
-			float alpha = min(0.99f, con_o.w * exp(power));
 
 			// hx = [-1, 0, pix_cam.x], hy = [0, -1, pix_cam.y]
 			// hu = A^T * hx, hv = A^T * hy
@@ -489,13 +484,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			G_u = max(G_u, G_xc);
 			// G_u = G_xc;
 
-			alpha = min(0.99f, con_o.w * G_u);
+			float alpha = min(0.99f, con_o.w * G_u);
 
 			if (alpha < 1.0f / 255.0f)
 				continue;
 
-			point_omega[binning_id] = alpha * T;
-			point_z[binning_id] = intersect_c.z;
 
 			float test_T = T * (1 - alpha);
 			if (test_T < 0.0001f)
@@ -526,6 +519,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// Keep track of last range entry to update this
 			// pixel.
 			last_contributor = contributor;
+			R_acc += last_omega * last_z;
+			S_acc += last_omega;
+			last_omega = alpha * T;
+			last_z = intersect_c.z;
 		}
 	}
 
@@ -542,6 +539,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		out_normal[0 * H * W + pix_id] = normal_intersect.x;
 		out_normal[1 * H * W + pix_id] = normal_intersect.y;
 		out_normal[2 * H * W + pix_id] = normal_intersect.z;
+		ray_R[pix_id] = R_acc;
+		ray_S[pix_id] = S_acc;
 	}
 }
 
@@ -567,8 +566,8 @@ void FORWARD::render(
 	float *out_color,
 	float *out_depth,
 	float *out_normal,
-	float *point_omega,
-	float *point_z)
+	float *ray_R,
+	float *ray_S)
 {
 	renderCUDA<NUM_CHANNELS><<<grid, block>>>(
 		ranges,
@@ -591,8 +590,8 @@ void FORWARD::render(
 		out_color,
 		out_depth,
 		out_normal,
-		point_omega,
-		point_z);
+		ray_R,
+		ray_S);
 }
 
 void FORWARD::preprocess(int P, int D, int M,

@@ -179,6 +179,9 @@ CudaRasterizer::ImageState CudaRasterizer::ImageState::fromChunk(char *&chunk, s
 	ImageState img;
 	obtain(chunk, img.n_contrib, N, 128);
 	obtain(chunk, img.ranges, N, 128);
+	obtain(chunk, img.ray_R, N, 128);
+	obtain(chunk, img.ray_S, N, 128);
+
 	return img;
 }
 
@@ -195,8 +198,6 @@ CudaRasterizer::BinningState CudaRasterizer::BinningState::fromChunk(char *&chun
 		binning.point_list_unsorted, binning.point_list, P);
 	obtain(chunk, binning.list_sorting_space, binning.sorting_size, 128);
 
-	obtain(chunk, binning.point_omega, P*BLOCK_SIZE, 128);
-	obtain(chunk, binning.point_z, P*BLOCK_SIZE, 128);
 	return binning;
 }
 
@@ -354,8 +355,8 @@ int CudaRasterizer::Rasterizer::forward(
 				   out_color,
 				   out_depth,
 				   out_normal,
-				   binningState.point_omega,
-				   binningState.point_z),
+				   imgState.ray_R,
+				   imgState.ray_S),
 			   debug);
 
 	return num_rendered;
@@ -425,6 +426,8 @@ void CudaRasterizer::Rasterizer::backward(
 				   block,
 				   imgState.ranges,
 				   binningState.point_list,
+				   means3D,
+				   viewmatrix,
 				   width, height,
 				   focal_x, focal_y,
 				   background,
@@ -433,9 +436,11 @@ void CudaRasterizer::Rasterizer::backward(
 				   color_ptr,
 				   depth_ptr,
 				   alphas,
+				   geomState.STuv,
+				   (glm::vec3 *)scales,
 				   geomState.A,
-				   binningState.point_omega,
-				   binningState.point_z,
+				   imgState.ray_R,
+				   imgState.ray_S,
 				   imgState.n_contrib,
 				   dL_dpix,
 				   dL_dpix_depth,

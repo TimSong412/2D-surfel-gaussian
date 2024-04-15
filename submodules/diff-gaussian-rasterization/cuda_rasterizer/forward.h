@@ -73,8 +73,8 @@ namespace FORWARD
 		float *out_color,
 		float *out_depth,
 		float *out_normal,
-		float *point_omega,
-		float *point_z);
+		float *ray_R,
+		float *ray_S);
 }
 
 #endif

@@ -52,6 +52,10 @@ namespace CudaRasterizer
 		uint2 *ranges;
 		uint32_t *n_contrib;
 
+
+		float *ray_R;
+		float *ray_S;
+
 		static ImageState fromChunk(char *&chunk, size_t N);
 	};
 
@@ -63,9 +67,6 @@ namespace CudaRasterizer
 		uint32_t *point_list_unsorted;
 		uint32_t *point_list;
 		char *list_sorting_space;
-
-		float *point_omega;
-		float *point_z;
 
 		static BinningState fromChunk(char *&chunk, size_t P);
 	};

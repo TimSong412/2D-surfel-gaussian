@@ -306,6 +306,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	renderCUDA(
 		const uint2 *__restrict__ ranges,
 		const uint32_t *__restrict__ point_list,
+		const float *__restrict__ orig_points,
+		const float *viewmatrix,
 		int W, int H,
 		const float focal_x, const float focal_y,
 		const float *__restrict__ bg_color,
@@ -314,9 +316,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const float *__restrict__ colors,
 		const float *__restrict__ depths,
 		const float *__restrict__ alphas,
+		const float *__restrict__ STuv,
+		const glm::vec3 *__restrict__ scale,
 		const float *__restrict__ A,
-		const float *__restrict__ point_omega,
-		const float *__restrict__ point_z,
+		const float *__restrict__ ray_R,
+		const float *__restrict__ ray_S,
 		const uint32_t *__restrict__ n_contrib,
 		const float *__restrict__ dL_dpixels,
 		const float *__restrict__ dL_dpixel_depths,
@@ -330,7 +334,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		float2 *__restrict__ dL_dc_margin,
 		glm::vec3 *__restrict__ dL_dmeans3D,
 		glm::vec3 *__restrict__ dL_dscale,
-		glm::vec4 *__restrict__ dL_drot)
+		glm::vec4 *__restrict__ dL_drot,
+		float *__restrict__ Ld_value)
 {
 	// We rasterize again. Compute necessary block info.
 	auto block = cg::this_thread_block();
@@ -357,6 +362,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	__shared__ float collected_colors[C * BLOCK_SIZE];
 	__shared__ float collected_depths[BLOCK_SIZE];
 	__shared__ float collected_A[BLOCK_SIZE * 9];
+	__shared__ float collected_STuv[BLOCK_SIZE * 6];
+	__shared__ float collected_origin[BLOCK_SIZE * 3];
+	__shared__ glm::vec3 collected_sacle[BLOCK_SIZE];
 
 	// In the forward, we stored the final value for T, the
 	// product of all (1 - alpha) factors.
@@ -374,6 +382,12 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float dL_dpixel_depth;
 	float accum_alpha_rec = 0;
 	float dL_dalpha;
+
+	float3 intersect_w;
+	float3 intersect_c;
+	
+	float dL_dz;
+
 	if (inside)
 	{
 		for (int i = 0; i < C; i++)
@@ -390,6 +404,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	// screen-space viewport corrdinates (-1 to 1)
 	const float ddelx_dx = 0.5 * W;
 	const float ddely_dy = 0.5 * H;
+
+	float P_acc = 0.0f;
+	float Q_acc = 0.0f;
+	float R_acc = ray_R[pix_id];
+	float S_acc = ray_S[pix_id];
 
 	// Traverse all Gaussians
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
@@ -409,10 +428,16 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			collected_depths[block.thread_rank()] = depths[coll_id];
 			for (int j = 0; j < 9; j++)
 				collected_A[block.thread_rank() * 9 + j] = A[coll_id * 9 + j];
+			for (int j = 0; j < 6; j++)
+				collected_STuv[block.thread_rank() * 6 + j] = STuv[coll_id * 6 + j];
+			for (int j = 0; j < 3; j++)
+				collected_origin[block.thread_rank() * 3 + j] = orig_points[coll_id * 3 + j];
+			collected_sacle[block.thread_rank()] = scale[coll_id];
+			
 		}
 		block.sync();
 
-		// Iterate over Gaussians
+		// Iterate over Gaussians, current batch
 		for (int j = 0; !done && j < min(BLOCK_SIZE, toDo); j++)
 		{
 			// Keep track of current Gaussian ID. Skip, if this one
@@ -425,6 +450,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float2 xy = collected_xy[j];
 			const float2 d = {xy.x - pixf.x, xy.y - pixf.y};
 			const float4 con_o = collected_conic_opacity[j];
+			
 
 			float hu_1 = -1.0f * collected_A[j * 9 + 0] + pix_cam.x * collected_A[j * 9 + 6];
 			float hu_2 = -1.0f * collected_A[j * 9 + 1] + pix_cam.x * collected_A[j * 9 + 7];
@@ -445,6 +471,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			float G_hat = max(G_u, G_xc);
 			// G_u = G_xc;
+
+			intersect_w = {collected_origin[j * 3 + 0] + collected_STuv[j * 6 + 0] * u + collected_STuv[j * 6 + 3] * v,
+						   collected_origin[j * 3 + 1] + collected_STuv[j * 6 + 1] * u + collected_STuv[j * 6 + 4] * v,
+						   collected_origin[j * 3 + 2] + collected_STuv[j * 6 + 2] * u + collected_STuv[j * 6 + 5] * v};
+			intersect_c = transformPoint4x3(intersect_w, viewmatrix);
 
 			float alpha = min(0.99f, con_o.w * G_hat);
 
@@ -497,13 +528,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				bg_dot_dpixel += bg_color[i] * dL_dpixel[i];
 			dL_dopa += (-T_final / (1.f - alpha)) * bg_dot_dpixel;
 
-			// Helpful reusable temporary variables
-			const float dL_dG = G_u >= G_xc ? con_o.w * dL_dopa : 0.f;
-
-			// Margin cases
-			// dL_dpx = dL_dG * dG_dpx, dL_dG = con_o.w * dL_dopa
-			const float dL_dpx_margin = G_xc > G_u ? (con_o.w * dL_dopa * 2 * G_hat * d.x * focal_x) : 0.f;
-			const float dL_dpy_margin = G_xc > G_u ? (con_o.w * dL_dopa * 2 * G_hat * d.y * focal_y) : 0.f;
 
 			const float dG_du = -u * G_hat;
 			const float dG_dv = -v * G_hat;
@@ -524,17 +548,69 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float dv_dhv2 = -v * hu_1 / Denom;
 			const float dv_dhv3 = -hu_1 / Denom;
 
-			glm::mat3 dL_dA_local;
+			// A is AT here
+			glm::mat3 dL_dA_local = glm::mat3(0.0f);
+
+
+#ifdef Ld
+			// weight: macro Wd
+
+			//dL/domega = dL/dopa
+			const float dLd_domega = Wd * (P_acc - Q_acc * intersect_c.z + S_acc * intersect_c.x - R_acc);
+			dL_dopa +=  dLd_domega;
+			atomicAdd(&Ld_value[0], dLd_domega);
+
+
+			// dL/dz
+
+			dL_dz = Wd * alpha * (S_acc - Q_acc);
+
+			// viewmatrix[2, 0], coloumn major
+			const float dz_dp0 = viewmatrix[8];
+			const float dz_dp1 = viewmatrix[9];
+			const float dz_dp2 = viewmatrix[10];
+
+			float dz_dsu = 0; // ti =sti / s
+			float dz_dsv = 0;
+			for (int k =0; k<3; k++)
+			{
+				dz_dsu += viewmatrix[8+k] * collected_STuv[j * 6 + k] * u / collected_sacle[j].x;
+				dz_dsv += viewmatrix[8+k] * collected_STuv[j * 6 + k + 3] * v / collected_sacle[j].y;
+			}
+
+
+			// dL/dA
+
+			
+
+			// update PQRS
+			P_acc += alpha * intersect_c.z;
+			Q_acc += alpha;
+			R_acc -= alpha * intersect_c.x;
+			S_acc -= alpha;
+
+#endif
+
+
+			// Margin cases
+			// dL_dpx = dL_dG * dG_dpx, dL_dG = con_o.w * dL_dopa
+			const float dL_dpx_margin = G_xc > G_u ? (con_o.w * dL_dopa * 2 * G_hat * d.x * focal_x) : 0.f;
+			const float dL_dpy_margin = G_xc > G_u ? (con_o.w * dL_dopa * 2 * G_hat * d.y * focal_y) : 0.f;
+
+			// Helpful reusable temporary variables
+			const float dL_dG = G_u >= G_xc ? con_o.w * dL_dopa : 0.f;
+
+			
 			// WARNING: transpose
-			dL_dA_local[0][0] = dL_dG * (dG_du * (-du_dhu1) + dG_dv * (-dv_dhu1));
-			dL_dA_local[0][1] = dL_dG * (dG_du * (-du_dhv1) + dG_dv * (-dv_dhv1));
-			dL_dA_local[0][2] = dL_dG * (dG_du * (du_dhu1 * pix_cam.x + du_dhv1 * pix_cam.y) + dG_dv * (dv_dhu1 * pix_cam.x + dv_dhv1 * pix_cam.y));
-			dL_dA_local[1][0] = dL_dG * (dG_du * (-du_dhu2) + dG_dv * (-dv_dhu2));
-			dL_dA_local[1][1] = dL_dG * (dG_du * (-du_dhv2) + dG_dv * (-dv_dhv2));
-			dL_dA_local[1][2] = dL_dG * (dG_du * (du_dhu2 * pix_cam.x + du_dhv2 * pix_cam.y) + dG_dv * (dv_dhu2 * pix_cam.x + dv_dhv2 * pix_cam.y));
-			dL_dA_local[2][0] = dL_dG * (dG_du * (-du_dhu3) + dG_dv * (-dv_dhu3));
-			dL_dA_local[2][1] = dL_dG * (dG_du * (-du_dhv3) + dG_dv * (-dv_dhv3));
-			dL_dA_local[2][2] = dL_dG * (dG_du * (du_dhu3 * pix_cam.x + du_dhv3 * pix_cam.y) + dG_dv * (dv_dhu3 * pix_cam.x + dv_dhv3 * pix_cam.y));
+			dL_dA_local[0][0] += dL_dG * (dG_du * (-du_dhu1) + dG_dv * (-dv_dhu1));
+			dL_dA_local[0][1] += dL_dG * (dG_du * (-du_dhv1) + dG_dv * (-dv_dhv1));
+			dL_dA_local[0][2] += dL_dG * (dG_du * (du_dhu1 * pix_cam.x + du_dhv1 * pix_cam.y) + dG_dv * (dv_dhu1 * pix_cam.x + dv_dhv1 * pix_cam.y));
+			dL_dA_local[1][0] += dL_dG * (dG_du * (-du_dhu2) + dG_dv * (-dv_dhu2));
+			dL_dA_local[1][1] += dL_dG * (dG_du * (-du_dhv2) + dG_dv * (-dv_dhv2));
+			dL_dA_local[1][2] += dL_dG * (dG_du * (du_dhu2 * pix_cam.x + du_dhv2 * pix_cam.y) + dG_dv * (dv_dhu2 * pix_cam.x + dv_dhv2 * pix_cam.y));
+			dL_dA_local[2][0] += dL_dG * (dG_du * (-du_dhu3) + dG_dv * (-dv_dhu3));
+			dL_dA_local[2][1] += dL_dG * (dG_du * (-du_dhv3) + dG_dv * (-dv_dhv3));
+			dL_dA_local[2][2] += dL_dG * (dG_du * (du_dhu3 * pix_cam.x + du_dhv3 * pix_cam.y) + dG_dv * (dv_dhu3 * pix_cam.x + dv_dhv3 * pix_cam.y));
 
 			dL_dA_local = glm::transpose(dL_dA_local);
 
@@ -563,16 +639,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&(dL_dA[global_id * 9 + 7]), dL_dA_local[2][1]);
 			atomicAdd(&(dL_dA[global_id * 9 + 8]), dL_dA_local[2][2]);
 
-#ifdef Ld
-			//dL/domega
-
-
-
-
-
-			// dL/dz
-
-#endif
 		}
 	}
 }
@@ -636,6 +702,8 @@ void BACKWARD::render(
 	const dim3 grid, const dim3 block,
 	const uint2 *ranges,
 	const uint32_t *point_list,
+	const float *orig_points,
+	const float *viewmatrix,
 	int W, int H,
 	const float focal_x, const float focal_y,
 	const float *bg_color,
@@ -644,9 +712,11 @@ void BACKWARD::render(
 	const float *colors,
 	const float *depths,
 	const float *alphas,
+	const float *STuv,
+	const glm::vec3 *scale,
 	const float *A,
-	const float *point_omega,
-	const float *point_z,
+	const float *ray_R,
+	const float *ray_S,
 	const uint32_t *n_contrib,
 	const float *dL_dpixels,
 	const float *dL_dpixel_depths,
@@ -662,9 +732,12 @@ void BACKWARD::render(
 	glm::vec3 *dL_dscale,
 	glm::vec4 *dL_drot)
 {
+	float *Ld_value = 0;
 	renderCUDA<NUM_CHANNELS><<<grid, block>>>(
 		ranges,
 		point_list,
+		orig_points,
+		viewmatrix,
 		W, H,
 		focal_x, focal_y,
 		bg_color,
@@ -673,9 +746,11 @@ void BACKWARD::render(
 		colors,
 		depths,
 		alphas,
+		STuv,
+		scale,
 		A,
-		point_omega,
-		point_z,
+		ray_R,
+		ray_S,
 		n_contrib,
 		dL_dpixels,
 		dL_dpixel_depths,
@@ -689,5 +764,7 @@ void BACKWARD::render(
 		dL_dc_margin,
 		dL_dmean3D,
 		dL_dscale,
-		dL_drot);
+		dL_drot,
+		Ld_value);
+		
 }
