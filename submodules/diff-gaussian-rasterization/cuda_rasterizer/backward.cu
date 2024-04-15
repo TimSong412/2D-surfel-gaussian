@@ -558,7 +558,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			//dL/domega = dL/dopa
 			const float dLd_domega = Wd * (P_acc - Q_acc * intersect_c.z + S_acc * intersect_c.x - R_acc);
 			dL_dopa +=  dLd_domega;
-			atomicAdd(&Ld_value[0], dLd_domega);
+			atomicAdd(Ld_value, dLd_domega);
 
 
 			// dL/dz
@@ -732,7 +732,9 @@ void BACKWARD::render(
 	glm::vec3 *dL_dscale,
 	glm::vec4 *dL_drot)
 {
-	float *Ld_value = 0;
+	float Ld_value = 0.0f;
+	float *Ld_value_d;
+	cudaMalloc(&Ld_value_d, sizeof(float));
 	renderCUDA<NUM_CHANNELS><<<grid, block>>>(
 		ranges,
 		point_list,
@@ -765,6 +767,8 @@ void BACKWARD::render(
 		dL_dmean3D,
 		dL_dscale,
 		dL_drot,
-		Ld_value);
+		Ld_value_d);
+	cudaMemcpy(&Ld_value, Ld_value_d, sizeof(float), cudaMemcpyDeviceToHost);
+	cudaFree(Ld_value_d);
 		
 }
