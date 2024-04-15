@@ -514,15 +514,18 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				// n_i = {collected_normal[j * 3 + 0], collected_normal[j * 3 + 1], collected_normal[j * 3 + 2]};
 			}
 
+			R_acc += last_omega * last_z;
+			S_acc += last_omega;
+
+			last_omega = alpha * T;
+			last_z = intersect_c.z;
+
 			T = test_T;
 
 			// Keep track of last range entry to update this
 			// pixel.
 			last_contributor = contributor;
-			R_acc += last_omega * last_z;
-			S_acc += last_omega;
-			last_omega = alpha * T;
-			last_z = intersect_c.z;
+			
 		}
 	}
 

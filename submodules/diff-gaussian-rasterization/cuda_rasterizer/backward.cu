@@ -556,9 +556,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// weight: macro Wd
 
 			//dL/domega = dL/dopa
-			const float dLd_domega = Wd * (P_acc - Q_acc * intersect_c.z + S_acc * intersect_c.x - R_acc);
+			const float dLd_domega = Wd * (P_acc - Q_acc * intersect_c.z + S_acc * intersect_c.z - R_acc);
 			dL_dopa +=  dLd_domega;
-			atomicAdd(Ld_value, dLd_domega);
+			// atomicAdd(Ld_value, dLd_domega);
 
 
 			// dL/dz
@@ -586,7 +586,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// update PQRS
 			P_acc += alpha * intersect_c.z;
 			Q_acc += alpha;
-			R_acc -= alpha * intersect_c.x;
+			R_acc -= alpha * intersect_c.z;
 			S_acc -= alpha;
 
 #endif
@@ -641,6 +641,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 		}
 	}
+	float diff = R_acc - 0.0f;
 }
 
 void BACKWARD::preprocess(
