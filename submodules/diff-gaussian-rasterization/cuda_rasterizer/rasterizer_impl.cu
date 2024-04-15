@@ -195,8 +195,8 @@ CudaRasterizer::BinningState CudaRasterizer::BinningState::fromChunk(char *&chun
 		binning.point_list_unsorted, binning.point_list, P);
 	obtain(chunk, binning.list_sorting_space, binning.sorting_size, 128);
 
-	obtain(chunk, binning.point_omega, P, 128);
-	obtain(chunk, binning.point_z, P, 128);
+	obtain(chunk, binning.point_omega, P*BLOCK_SIZE, 128);
+	obtain(chunk, binning.point_z, P*BLOCK_SIZE, 128);
 	return binning;
 }
 

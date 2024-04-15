@@ -427,7 +427,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		{
 			int coll_id = point_list[range.x + progress];
 			collected_id[block.thread_rank()] = coll_id;
-			collected_binning_id[block.thread_rank()] = range.x + progress;
+			collected_binning_id[block.thread_rank()] = (range.x + progress) * BLOCK_SIZE + block.thread_rank();
 			collected_xy[block.thread_rank()] = points_xy_image[coll_id];
 			collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
 			for (int j = 0; j < 9; j++)
@@ -496,7 +496,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			point_omega[binning_id] = alpha * T;
 			point_z[binning_id] = intersect_c.z;
-			
+
 			float test_T = T * (1 - alpha);
 			if (test_T < 0.0001f)
 			{
