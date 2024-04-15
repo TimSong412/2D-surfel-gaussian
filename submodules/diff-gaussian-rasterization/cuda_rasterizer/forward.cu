@@ -364,7 +364,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const float *__restrict__ bg_color,
 		float *__restrict__ out_color,
 		float *__restrict__ out_depth,
-		float *__restrict__ out_normal)
+		float *__restrict__ out_normal,
+		float *__restrict__ point_omega,
+		float *__restrict__ point_z)
 {
 	// Identify current tile and associated min/max pixel range.
 	auto block = cg::this_thread_block();
@@ -396,6 +398,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	__shared__ float collected_STuv[BLOCK_SIZE * 6];
 	__shared__ float collected_origin[BLOCK_SIZE * 3];
 	__shared__ float3 collected_normal[BLOCK_SIZE];
+	__shared__ uint32_t collected_binning_id[BLOCK_SIZE];
 	// __shared__ float collected_normal[BLOCK_SIZE * 3];
 
 	// Initialize helper variables
@@ -424,6 +427,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		{
 			int coll_id = point_list[range.x + progress];
 			collected_id[block.thread_rank()] = coll_id;
+			collected_binning_id[block.thread_rank()] = range.x + progress;
 			collected_xy[block.thread_rank()] = points_xy_image[coll_id];
 			collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
 			for (int j = 0; j < 9; j++)
@@ -447,6 +451,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			float2 xy = collected_xy[j];
 			float2 d = {xy.x - pixf.x, xy.y - pixf.y};
 			float4 con_o = collected_conic_opacity[j];
+			uint32_t binning_id = collected_binning_id[j];
 			float power = -0.5f * (con_o.x * d.x * d.x + con_o.z * d.y * d.y) - con_o.y * d.x * d.y;
 			if (power > 0.0f)
 				continue;
@@ -488,6 +493,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			if (alpha < 1.0f / 255.0f)
 				continue;
+
+			point_omega[binning_id] = alpha * T;
+			point_z[binning_id] = intersect_c.z;
+			
 			float test_T = T * (1 - alpha);
 			if (test_T < 0.0001f)
 			{
@@ -557,7 +566,9 @@ void FORWARD::render(
 	const float *bg_color,
 	float *out_color,
 	float *out_depth,
-	float *out_normal)
+	float *out_normal,
+	float *point_omega,
+	float *point_z)
 {
 	renderCUDA<NUM_CHANNELS><<<grid, block>>>(
 		ranges,
@@ -579,7 +590,9 @@ void FORWARD::render(
 		bg_color,
 		out_color,
 		out_depth,
-		out_normal);
+		out_normal,
+		point_omega,
+		point_z);
 }
 
 void FORWARD::preprocess(int P, int D, int M,

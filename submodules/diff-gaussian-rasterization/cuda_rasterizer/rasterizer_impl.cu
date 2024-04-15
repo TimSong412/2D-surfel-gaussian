@@ -88,7 +88,7 @@ __global__ void duplicateWithKeys(
 		uint32_t off = (idx == 0) ? 0 : offsets[idx - 1];
 		uint2 rect_min, rect_max;
 
-		//rect: tile index bounding box
+		// rect: tile index bounding box
 		getRect(points_xy[idx], radii[idx], rect_min, rect_max, grid);
 
 		// For each tile that the bounding rect overlaps, emit a
@@ -194,6 +194,9 @@ CudaRasterizer::BinningState CudaRasterizer::BinningState::fromChunk(char *&chun
 		binning.point_list_keys_unsorted, binning.point_list_keys,
 		binning.point_list_unsorted, binning.point_list, P);
 	obtain(chunk, binning.list_sorting_space, binning.sorting_size, 128);
+
+	obtain(chunk, binning.point_omega, P, 128);
+	obtain(chunk, binning.point_z, P, 128);
 	return binning;
 }
 
@@ -307,7 +310,7 @@ int CudaRasterizer::Rasterizer::forward(
 		tile_grid)
 		CHECK_CUDA(, debug)
 
-	int bit = getHigherMsb(tile_grid.x * tile_grid.y);
+			int bit = getHigherMsb(tile_grid.x * tile_grid.y);
 
 	// Sort complete list of (duplicated) Gaussian indices by keys
 	CHECK_CUDA(cub::DeviceRadixSort::SortPairs(
@@ -349,8 +352,10 @@ int CudaRasterizer::Rasterizer::forward(
 				   imgState.n_contrib,
 				   background,
 				   out_color,
-				   out_depth, 
-				   out_normal),
+				   out_depth,
+				   out_normal,
+				   binningState.point_omega,
+				   binningState.point_z),
 			   debug);
 
 	return num_rendered;
@@ -429,6 +434,8 @@ void CudaRasterizer::Rasterizer::backward(
 				   depth_ptr,
 				   alphas,
 				   geomState.A,
+				   binningState.point_omega,
+				   binningState.point_z,
 				   imgState.n_contrib,
 				   dL_dpix,
 				   dL_dpix_depth,
@@ -437,9 +444,12 @@ void CudaRasterizer::Rasterizer::backward(
 				   (float4 *)dL_dconic,
 				   dL_dopacity,
 				   dL_dcolor,
-				   dL_ddepth, 
+				   dL_ddepth,
 				   dL_dA,
-				   (float2 *)dL_dc_margin),
+				   (float2 *)dL_dc_margin,
+				   (glm::vec3 *)dL_dmean3D,
+				   (glm::vec3 *)dL_dscale,
+				   (glm::vec4 *)dL_drot),
 			   debug)
 
 	// Take care of the rest of preprocessing. Was the precomputed covariance

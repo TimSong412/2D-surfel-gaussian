@@ -298,7 +298,6 @@ __global__ void preprocessCUDA(
 	// Compute gradient updates due to computing covariance from scale/rotation
 	if (scales)
 		computeASTuv(scales[idx], scale_modifier, rotations[idx], m, view, dL_dA + idx * 9, dL_dmeans + idx, dL_dscale + idx, dL_drot + idx);
-
 }
 
 // Backward version of the rendering procedure.
@@ -316,6 +315,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const float *__restrict__ depths,
 		const float *__restrict__ alphas,
 		const float *__restrict__ A,
+		const float *__restrict__ point_omega,
+		const float *__restrict__ point_z,
 		const uint32_t *__restrict__ n_contrib,
 		const float *__restrict__ dL_dpixels,
 		const float *__restrict__ dL_dpixel_depths,
@@ -326,7 +327,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		float *__restrict__ dL_dcolors,
 		float *__restrict__ dL_ddepths,
 		float *__restrict__ dL_dA,
-		float2 *__restrict__ dL_dc_margin)
+		float2 *__restrict__ dL_dc_margin,
+		glm::vec3 *__restrict__ dL_dmeans3D,
+		glm::vec3 *__restrict__ dL_dscale,
+		glm::vec4 *__restrict__ dL_drot)
 {
 	// We rasterize again. Compute necessary block info.
 	auto block = cg::this_thread_block();
@@ -558,6 +562,17 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&(dL_dA[global_id * 9 + 6]), dL_dA_local[2][0]);
 			atomicAdd(&(dL_dA[global_id * 9 + 7]), dL_dA_local[2][1]);
 			atomicAdd(&(dL_dA[global_id * 9 + 8]), dL_dA_local[2][2]);
+
+#ifdef Ld
+			//dL/domega
+
+
+
+
+
+			// dL/dz
+
+#endif
 		}
 	}
 }
@@ -630,6 +645,8 @@ void BACKWARD::render(
 	const float *depths,
 	const float *alphas,
 	const float *A,
+	const float *point_omega,
+	const float *point_z,
 	const uint32_t *n_contrib,
 	const float *dL_dpixels,
 	const float *dL_dpixel_depths,
@@ -640,7 +657,10 @@ void BACKWARD::render(
 	float *dL_dcolors,
 	float *dL_ddepths,
 	float *dL_dA,
-	float2 *dL_dc_margin)
+	float2 *dL_dc_margin,
+	glm::vec3 *dL_dmean3D,
+	glm::vec3 *dL_dscale,
+	glm::vec4 *dL_drot)
 {
 	renderCUDA<NUM_CHANNELS><<<grid, block>>>(
 		ranges,
@@ -654,6 +674,8 @@ void BACKWARD::render(
 		depths,
 		alphas,
 		A,
+		point_omega,
+		point_z,
 		n_contrib,
 		dL_dpixels,
 		dL_dpixel_depths,
@@ -664,5 +686,8 @@ void BACKWARD::render(
 		dL_dcolors,
 		dL_ddepths,
 		dL_dA,
-		dL_dc_margin);
+		dL_dc_margin,
+		dL_dmean3D,
+		dL_dscale,
+		dL_drot);
 }

@@ -33,6 +33,8 @@ namespace BACKWARD
 		const float *depths,
 		const float *alphas,
 		const float *A,
+		const float *point_omega,
+		const float *point_z,
 		const uint32_t *n_contrib,
 		const float *dL_dpixels,
 		const float *dL_dpixel_depths,
@@ -43,7 +45,10 @@ namespace BACKWARD
 		float *dL_dcolors,
 		float *dL_ddepths,
 		float *dL_dA,
-		float2 *dL_dc_margin);
+		float2 *dL_dc_margin,
+		glm::vec3 *dL_dmean3D,
+		glm::vec3 *dL_dscale,
+		glm::vec4 *dL_drot);
 
 	void preprocess(
 		int P, int D, int M,
