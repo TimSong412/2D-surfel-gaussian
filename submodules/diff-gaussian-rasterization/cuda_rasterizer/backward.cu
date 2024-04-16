@@ -557,6 +557,13 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 #ifdef Ld
 			// weight: macro Wd
+			// update PQRS
+			if (i != 0 || j != 0) {
+				P_acc += alpha * intersect_c.z;
+				Q_acc += alpha;
+				R_acc -= alpha * intersect_c.z;
+				S_acc -= alpha;
+			}
 
 			//dL/domega = dL/dopa
 			const float dLd_domega = Wd * (P_acc - Q_acc * intersect_c.z + S_acc * intersect_c.z - R_acc);
@@ -636,12 +643,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dL_dA_local[2][2] += dL_dz * (dz_du * (du_dhu3 * pix_cam.x + du_dhv3 * pix_cam.y) + dz_dv * (dv_dhu3 * pix_cam.x + dv_dhv3 * pix_cam.y));
 
 
-			// update PQRS
-			P_acc += alpha * intersect_c.z;
-			Q_acc += alpha;
-			R_acc -= alpha * intersect_c.z;
-			S_acc -= alpha;
-
 #endif
 
 
@@ -695,6 +696,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		}
 	}
 	float diff = R_acc - 0.0f;
+	
 }
 
 void BACKWARD::preprocess(
