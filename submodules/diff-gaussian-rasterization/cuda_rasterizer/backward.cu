@@ -318,6 +318,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const float *__restrict__ alphas,
 		const float *__restrict__ STuv,
 		const glm::vec3 *__restrict__ scale,
+		const glm::vec4 *__restrict__ rotation,
 		const float *__restrict__ A,
 		const float *__restrict__ ray_R,
 		const float *__restrict__ ray_S,
@@ -364,7 +365,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	__shared__ float collected_A[BLOCK_SIZE * 9];
 	__shared__ float collected_STuv[BLOCK_SIZE * 6];
 	__shared__ float collected_origin[BLOCK_SIZE * 3];
-	__shared__ glm::vec3 collected_sacle[BLOCK_SIZE];
+	__shared__ glm::vec3 collected_scale[BLOCK_SIZE];
+	__shared__ glm::vec4 collected_rotation[BLOCK_SIZE];
 
 	// In the forward, we stored the final value for T, the
 	// product of all (1 - alpha) factors.
@@ -399,6 +401,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float last_alpha = 0;
 	float last_color[C] = {0};
 	float last_depth = 0;
+	float omega = 0;
 
 	// Gradient of pixel coordinate w.r.t. normalized
 	// screen-space viewport corrdinates (-1 to 1)
@@ -409,6 +412,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float Q_acc = 0.0f;
 	float R_acc = ray_R[pix_id];
 	float S_acc = ray_S[pix_id];
+	bool first_pass = true;
 
 	// Traverse all Gaussians
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
@@ -432,7 +436,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				collected_STuv[block.thread_rank() * 6 + j] = STuv[coll_id * 6 + j];
 			for (int j = 0; j < 3; j++)
 				collected_origin[block.thread_rank() * 3 + j] = orig_points[coll_id * 3 + j];
-			collected_sacle[block.thread_rank()] = scale[coll_id];
+			collected_scale[block.thread_rank()] = scale[coll_id];
+			collected_rotation[block.thread_rank()] = rotation[coll_id];
 			
 		}
 		block.sync();
@@ -554,40 +559,101 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 #ifdef Ld
 			// weight: macro Wd
+			// update PQRS
+			if (!first_pass) {
+				omega = alpha * T;
+				P_acc += omega * intersect_c.z;
+				Q_acc += omega;
+				R_acc -= omega * intersect_c.z;
+				S_acc -= omega;
+			}
+			first_pass = false;
+
+			// if (threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
+			// 	// printf("R_acc (backward): %f\n", R_acc);
+			// 	printf("S_acc (backward (%d,%d), d=%f): %f\n",i,j,intersect_c.z,S_acc);
+			// }
 
 			//dL/domega = dL/dopa
 			const float dLd_domega = Wd * (P_acc - Q_acc * intersect_c.z + S_acc * intersect_c.z - R_acc);
-			dL_dopa +=  dLd_domega;
+			// dL_dopa +=  dLd_domega;
 			// atomicAdd(Ld_value, dLd_domega);
 
 
-			// dL/dz
+			// dz/dp
 
-			dL_dz = Wd * alpha * (S_acc - Q_acc);
+			dL_dz = Wd * alpha * T * (S_acc - Q_acc);
 
+			// dL/dp
 			// viewmatrix[2, 0], coloumn major
 			const float dz_dp0 = viewmatrix[8];
 			const float dz_dp1 = viewmatrix[9];
 			const float dz_dp2 = viewmatrix[10];
 
+			atomicAdd(&dL_dmeans3D[global_id].x, dL_dz * dz_dp0);
+			atomicAdd(&dL_dmeans3D[global_id].y, dL_dz * dz_dp1);
+			atomicAdd(&dL_dmeans3D[global_id].z, dL_dz * dz_dp2);
+
+			// dz/ds
+
 			float dz_dsu = 0; // ti =sti / s
 			float dz_dsv = 0;
-			for (int k =0; k<3; k++)
+			for (int k = 0; k < 3; k++)
 			{
-				dz_dsu += viewmatrix[8+k] * collected_STuv[j * 6 + k] * u / collected_sacle[j].x;
-				dz_dsv += viewmatrix[8+k] * collected_STuv[j * 6 + k + 3] * v / collected_sacle[j].y;
+				dz_dsu += viewmatrix[8+k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
+				dz_dsv += viewmatrix[8+k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
 			}
 
+			atomicAdd(&dL_dscale[global_id].x, dL_dz * dz_dsu);
+			atomicAdd(&dL_dscale[global_id].y, dL_dz * dz_dsv);
+
+			// dz/dt
+
+			float dL_dtu0 = dL_dz * viewmatrix[8] * collected_scale[j].x * u;
+			float dL_dtu1 = dL_dz * viewmatrix[9] * collected_scale[j].x * u;
+			float dL_dtu2 = dL_dz * viewmatrix[10] * collected_scale[j].x * u;
+			float dL_dtv0 = dL_dz * viewmatrix[8] * collected_scale[j].y * v;
+			float dL_dtv1 = dL_dz * viewmatrix[9] * collected_scale[j].y * v;
+			float dL_dtv2 = dL_dz * viewmatrix[10] * collected_scale[j].y * v;
+
+			// compute gradient through quaternion
+			glm::vec4 q = collected_rotation[j]; // / glm::length(rot);
+			float r = q.x;
+			float x = q.y;
+			float y = q.z;
+			float z = q.w;
+			const float dLd_dr = 2.0f * (z * (dL_dtu1 - dL_dtv0) - y * dL_dtu2 + x * dL_dtv2);
+			const float dLd_dx = 2.0f * (y * (dL_dtu1 + dL_dtv0) + z * dL_dtu2 + r * dL_dtv2 - 2.0f * x * dL_dtv1);
+			const float dLd_dy = 2.0f * (x * (dL_dtu1 + dL_dtv0) - r * dL_dtu2 + z * dL_dtv2 - 2.0f * y * dL_dtu0);
+			const float dLd_dz = 2.0f * (r * (dL_dtu1 - dL_dtv0) + x * dL_dtu2 + y * dL_dtv2 - 2.0f * z * (dL_dtu0 + dL_dtv1));
+			
+			atomicAdd(&dL_drot[global_id].x, dLd_dr);
+			atomicAdd(&dL_drot[global_id].y, dLd_dx);
+			atomicAdd(&dL_drot[global_id].z, dLd_dy);
+			atomicAdd(&dL_drot[global_id].w, dLd_dz);
 
 			// dL/dA
 
-			
+			float dz_du = collected_STuv[j * 6 + 0] + collected_STuv[j * 6 + 1] + collected_STuv[j * 6 + 2];
+			float dz_dv = collected_STuv[j * 6 + 3] + collected_STuv[j * 6 + 4] + collected_STuv[j * 6 + 5];
 
-			// update PQRS
-			P_acc += alpha * intersect_c.z;
-			Q_acc += alpha;
-			R_acc -= alpha * intersect_c.z;
-			S_acc -= alpha;
+			/*
+			same as the original but replace 
+										dL/dG with dL/dz
+										dG/du with dz/du
+			 							dG/dv with dz/dv
+			*/
+			
+			dL_dA_local[0][0] += dL_dz * (dz_du * (-du_dhu1) + dz_dv * (-dv_dhu1));
+			dL_dA_local[0][1] += dL_dz * (dz_du * (-du_dhv1) + dz_dv * (-dv_dhv1));
+			dL_dA_local[0][2] += dL_dz * (dz_du * (du_dhu1 * pix_cam.x + du_dhv1 * pix_cam.y) + dz_dv * (dv_dhu1 * pix_cam.x + dv_dhv1 * pix_cam.y));
+			dL_dA_local[1][0] += dL_dz * (dz_du * (-du_dhu2) + dz_dv * (-dv_dhu2));
+			dL_dA_local[1][1] += dL_dz * (dz_du * (-du_dhv2) + dz_dv * (-dv_dhv2));
+			dL_dA_local[1][2] += dL_dz * (dz_du * (du_dhu2 * pix_cam.x + du_dhv2 * pix_cam.y) + dz_dv * (dv_dhu2 * pix_cam.x + dv_dhv2 * pix_cam.y));
+			dL_dA_local[2][0] += dL_dz * (dz_du * (-du_dhu3) + dz_dv * (-dv_dhu3));
+			dL_dA_local[2][1] += dL_dz * (dz_du * (-du_dhv3) + dz_dv * (-dv_dhv3));
+			dL_dA_local[2][2] += dL_dz * (dz_du * (du_dhu3 * pix_cam.x + du_dhv3 * pix_cam.y) + dz_dv * (dv_dhu3 * pix_cam.x + dv_dhv3 * pix_cam.y));
+
 
 #endif
 
@@ -642,6 +708,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		}
 	}
 	float diff = R_acc - 0.0f;
+	
 }
 
 void BACKWARD::preprocess(
@@ -715,6 +782,7 @@ void BACKWARD::render(
 	const float *alphas,
 	const float *STuv,
 	const glm::vec3 *scale,
+	const glm::vec4 *rotation,
 	const float *A,
 	const float *ray_R,
 	const float *ray_S,
@@ -751,6 +819,7 @@ void BACKWARD::render(
 		alphas,
 		STuv,
 		scale,
+		rotation,
 		A,
 		ray_R,
 		ray_S,

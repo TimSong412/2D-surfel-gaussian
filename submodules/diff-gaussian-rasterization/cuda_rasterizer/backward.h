@@ -36,6 +36,7 @@ namespace BACKWARD
 		const float *alphas,
 		const float *STuv,
 		const glm::vec3 *scales,
+		const glm::vec4 *rotations,
 		const float *A,
 		const float *ray_R,
 		const float *ray_S,
