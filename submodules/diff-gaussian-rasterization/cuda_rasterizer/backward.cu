@@ -401,6 +401,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float last_alpha = 0;
 	float last_color[C] = {0};
 	float last_depth = 0;
+	float omega = 0;
 
 	// Gradient of pixel coordinate w.r.t. normalized
 	// screen-space viewport corrdinates (-1 to 1)
@@ -411,6 +412,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float Q_acc = 0.0f;
 	float R_acc = ray_R[pix_id];
 	float S_acc = ray_S[pix_id];
+	bool first_pass = true;
 
 	// Traverse all Gaussians
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
@@ -558,22 +560,29 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 #ifdef Ld
 			// weight: macro Wd
 			// update PQRS
-			if (i != 0 || j != 0) {
-				P_acc += alpha * intersect_c.z;
-				Q_acc += alpha;
-				R_acc -= alpha * intersect_c.z;
-				S_acc -= alpha;
+			if (!first_pass) {
+				omega = alpha * T;
+				P_acc += omega * intersect_c.z;
+				Q_acc += omega;
+				R_acc -= omega * intersect_c.z;
+				S_acc -= omega;
 			}
+			first_pass = false;
+
+			// if (threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
+			// 	// printf("R_acc (backward): %f\n", R_acc);
+			// 	printf("S_acc (backward (%d,%d), d=%f): %f\n",i,j,intersect_c.z,S_acc);
+			// }
 
 			//dL/domega = dL/dopa
 			const float dLd_domega = Wd * (P_acc - Q_acc * intersect_c.z + S_acc * intersect_c.z - R_acc);
-			dL_dopa +=  dLd_domega;
+			// dL_dopa +=  dLd_domega;
 			// atomicAdd(Ld_value, dLd_domega);
 
 
 			// dz/dp
 
-			dL_dz = Wd * alpha * (S_acc - Q_acc);
+			dL_dz = Wd * alpha * T * (S_acc - Q_acc);
 
 			// dL/dp
 			// viewmatrix[2, 0], coloumn major
@@ -628,10 +637,13 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			float dz_du = collected_STuv[j * 6 + 0] + collected_STuv[j * 6 + 1] + collected_STuv[j * 6 + 2];
 			float dz_dv = collected_STuv[j * 6 + 3] + collected_STuv[j * 6 + 4] + collected_STuv[j * 6 + 5];
 
-			// same as the original but replace 
-			// 							dL/dG with dL/dz
-			//							dG/du with dz/du
-			// 							dG/dv with dz/dv
+			/*
+			same as the original but replace 
+										dL/dG with dL/dz
+										dG/du with dz/du
+			 							dG/dv with dz/dv
+			*/
+			
 			dL_dA_local[0][0] += dL_dz * (dz_du * (-du_dhu1) + dz_dv * (-dv_dhu1));
 			dL_dA_local[0][1] += dL_dz * (dz_du * (-du_dhv1) + dz_dv * (-dv_dhv1));
 			dL_dA_local[0][2] += dL_dz * (dz_du * (du_dhu1 * pix_cam.x + du_dhv1 * pix_cam.y) + dz_dv * (dv_dhu1 * pix_cam.x + dv_dhv1 * pix_cam.y));
