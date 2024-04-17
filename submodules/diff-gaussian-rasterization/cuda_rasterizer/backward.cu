@@ -414,6 +414,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float S_acc = ray_S[pix_id];
 	bool first_pass = true;
 
+	const float R_start = R_acc;
+	const float S_start = S_acc;
+
+	float thread_Ld = 0.0f;
+
 	// Traverse all Gaussians
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
@@ -569,15 +574,17 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			}
 			first_pass = false;
 
-			// if (threadIdx.x == 0 && threadIdx.y == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
-			// 	// printf("R_acc (backward): %f\n", R_acc);
-			// 	printf("S_acc (backward (%d,%d), d=%f): %f\n",i,j,intersect_c.z,S_acc);
+			// if (blockIdx.x == 0 && blockIdx.y == 64 && threadIdx.x == 0 && threadIdx.y == 12)
+			// {
+			// 	printf("backward contributor = %d, z= %f, R_acc = %f\n", contributor, intersect_c.z, R_acc);
 			// }
+
 
 			//dL/domega = dL/dopa
 			const float dLd_domega = Wd * (P_acc - Q_acc * intersect_c.z + S_acc * intersect_c.z - R_acc);
-			// dL_dopa +=  dLd_domega;
-			// atomicAdd(Ld_value, dLd_domega);
+			dL_dopa +=  dLd_domega*T;
+			
+			thread_Ld += dLd_domega * alpha * T;
 
 
 			// dz/dp
@@ -634,8 +641,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			// dL/dA
 
-			float dz_du = collected_STuv[j * 6 + 0] + collected_STuv[j * 6 + 1] + collected_STuv[j * 6 + 2];
-			float dz_dv = collected_STuv[j * 6 + 3] + collected_STuv[j * 6 + 4] + collected_STuv[j * 6 + 5];
+			float dz_du = collected_STuv[j * 6 + 0]*viewmatrix[8] + collected_STuv[j * 6 + 1]*viewmatrix[9] + collected_STuv[j * 6 + 2]*viewmatrix[10];
+			float dz_dv = collected_STuv[j * 6 + 3]*viewmatrix[8] + collected_STuv[j * 6 + 4]*viewmatrix[9] + collected_STuv[j * 6 + 5]*viewmatrix[10];
 
 			/*
 			same as the original but replace 
@@ -706,8 +713,21 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&(dL_dA[global_id * 9 + 8]), dL_dA_local[2][2]);
 
 		}
+		
 	}
-	float diff = R_acc - 0.0f;
+	float diff = glm::abs(R_acc - 0.0f);
+	if (diff > 0.1f && inside)
+	{
+		printf("R_start: %f, R_acc: %f, bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", R_start, R_acc, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
+	}
+	diff = glm::abs(S_acc - 0.0f);
+	if (diff > 0.1f && inside)
+	{
+		printf("S_start: %f\n", S_start);
+		printf("S_acc: %f\n", S_acc);
+	}
+
+	atomicAdd(Ld_value, thread_Ld);
 	
 }
 
@@ -799,11 +819,12 @@ void BACKWARD::render(
 	float2 *dL_dc_margin,
 	glm::vec3 *dL_dmean3D,
 	glm::vec3 *dL_dscale,
-	glm::vec4 *dL_drot)
+	glm::vec4 *dL_drot,
+	float *Ld_value)
 {
-	float Ld_value = 0.0f;
-	float *Ld_value_d;
-	cudaMalloc(&Ld_value_d, sizeof(float));
+	// float Ld_value = 0.0f;
+	// float *Ld_value_d;
+	// cudaMalloc(&Ld_value_d, sizeof(float));
 	renderCUDA<NUM_CHANNELS><<<grid, block>>>(
 		ranges,
 		point_list,
@@ -837,8 +858,8 @@ void BACKWARD::render(
 		dL_dmean3D,
 		dL_dscale,
 		dL_drot,
-		Ld_value_d);
-	cudaMemcpy(&Ld_value, Ld_value_d, sizeof(float), cudaMemcpyDeviceToHost);
-	cudaFree(Ld_value_d);
+		Ld_value);
+	// cudaMemcpy(&Ld_value, Ld_value_d, sizeof(float), cudaMemcpyDeviceToHost);
+	// cudaFree(Ld_value_d);
 		
 }

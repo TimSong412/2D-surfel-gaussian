@@ -149,7 +149,8 @@ RasterizeGaussiansBackwardCUDA(
 	const torch::Tensor &binningBuffer,
 	const torch::Tensor &imageBuffer,
 	const torch::Tensor &alphas,
-	const bool debug)
+	const bool debug,
+	const torch::Tensor &Ld_value)
 {
 	const int P = means3D.size(0);
 	const int H = dL_dout_color.size(1);
@@ -211,7 +212,8 @@ RasterizeGaussiansBackwardCUDA(
 											 dL_drotations.contiguous().data<float>(),
 											 dL_dA.contiguous().data<float>(),
 											 dL_dc_margin.contiguous().data<float>(),
-											 debug);
+											 debug,
+											 Ld_value.contiguous().data<float>());
 	}
 
 	return std::make_tuple(dL_dmeans2D, dL_dcolors, dL_dopacity, dL_dmeans3D, dL_dcov3D, dL_dsh, dL_dscales, dL_drotations);

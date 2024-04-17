@@ -17,6 +17,6 @@
 #define BLOCK_Y 16
 
 #define Ld
-#define Wd 100.0f
+#define Wd 1.0f
 
 #endif

@@ -399,7 +399,8 @@ void CudaRasterizer::Rasterizer::backward(
 	float *dL_drot,
 	float *dL_dA,
 	float *dL_dc_margin,
-	bool debug)
+	bool debug,
+	float *Ld_value)
 {
 	GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
 	BinningState binningState = BinningState::fromChunk(binning_buffer, R);
@@ -455,7 +456,8 @@ void CudaRasterizer::Rasterizer::backward(
 				   (float2 *)dL_dc_margin,
 				   (glm::vec3 *)dL_dmean3D,
 				   (glm::vec3 *)dL_dscale,
-				   (glm::vec4 *)dL_drot),
+				   (glm::vec4 *)dL_drot,
+				   Ld_value),
 			   debug)
 
 	// Take care of the rest of preprocessing. Was the precomputed covariance

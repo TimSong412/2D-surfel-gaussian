@@ -517,6 +517,12 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			R_acc += last_omega * last_z;
 			S_acc += last_omega;
 
+
+			// if (blockIdx.x == 0 && blockIdx.y == 64 && threadIdx.x == 0 && threadIdx.y == 12)
+			// {
+			// 	printf("forward contributor = %d, z= %f, R_acc= %f\n", contributor, intersect_c.z, R_acc);
+			// }
+
 			last_omega = alpha * T;
 			last_z = intersect_c.z;
 

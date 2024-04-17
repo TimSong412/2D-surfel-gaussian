@@ -53,7 +53,8 @@ namespace BACKWARD
 		float2 *dL_dc_margin,
 		glm::vec3 *dL_dmean3D,
 		glm::vec3 *dL_dscale,
-		glm::vec4 *dL_drot);
+		glm::vec4 *dL_drot,
+		float *Ld_value);
 
 	void preprocess(
 		int P, int D, int M,
