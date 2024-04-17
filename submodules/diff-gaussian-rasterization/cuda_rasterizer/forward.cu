@@ -481,6 +481,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 						   collected_origin[j * 3 + 2] + collected_STuv[j * 6 + 2] * u + collected_STuv[j * 6 + 5] * v};
 			intersect_c = transformPoint4x3(intersect_w, viewmatrix);
 
+			if (intersect_c.z < 0) 
+				continue;
+
 			G_u = max(G_u, G_xc);
 			// G_u = G_xc;
 
@@ -514,18 +517,27 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				// n_i = {collected_normal[j * 3 + 0], collected_normal[j * 3 + 1], collected_normal[j * 3 + 2]};
 			}
 
-			R_acc += last_omega * last_z;
-			S_acc += last_omega;
+			if (G_u != G_xc) {
+				R_acc += last_omega * last_z;
+				S_acc += last_omega;
 
 
-			// if (blockIdx.x == 0 && blockIdx.y == 64 && threadIdx.x == 0 && threadIdx.y == 12)
-			// {
-			// 	printf("forward contributor = %d, z= %f, R_acc= %f\n", contributor, intersect_c.z, R_acc);
-			// }
+				if (intersect_c.z > 1000)
+				{
+					printf("forward contributor = %d, z= %f, R_acc= %f\n", contributor, intersect_c.z, R_acc);
+					printf("Gu %f G_xc %f\n", G_u, G_xc);
+				}
 
-			last_omega = alpha * T;
-			last_z = intersect_c.z;
+				last_omega = alpha * T;
+				last_z = intersect_c.z;
+				// if (intersect_c.z < 0 && inside){
+				// 	printf("%f at bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", intersect_c.z, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
+				// }
+				// assert(last_z >= 0 || !inside);
 
+			}
+
+			
 			T = test_T;
 
 			// Keep track of last range entry to update this
