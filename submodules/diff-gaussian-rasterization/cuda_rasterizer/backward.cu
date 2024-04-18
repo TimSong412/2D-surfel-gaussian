@@ -390,7 +390,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float3 intersect_w;
 	float3 intersect_c;
 
-	float dL_dm = 0.0f;
 	float dm_dz = 0.0f;
 	float dL_dz = 0.0f;
 
@@ -528,11 +527,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			}
 
 			// Propagate gradients from pixel depth to opacity
-			const float c_d = collected_depths[j];
-			accum_depth_rec = last_alpha * last_depth + (1.f - last_alpha) * accum_depth_rec;
-			last_depth = c_d;
-			dL_dopa += (c_d - accum_depth_rec) * dL_dpixel_depth;
-			atomicAdd(&(dL_ddepths[global_id]), dpixel_depth_ddepth * dL_dpixel_depth);
+			// const float c_d = collected_depths[j];
+			// accum_depth_rec = last_alpha * last_depth + (1.f - last_alpha) * accum_depth_rec;
+			// last_depth = c_d;
+			// dL_dopa += (c_d - accum_depth_rec) * dL_dpixel_depth;
+			// atomicAdd(&(dL_ddepths[global_id]), dpixel_depth_ddepth * dL_dpixel_depth);
 
 			// Propagate gradients from pixel alpha (weights_sum) to opacity
 			accum_alpha_rec = last_alpha + (1.f - last_alpha) * accum_alpha_rec;
@@ -592,35 +591,26 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// }
 
 			// dL/domega = dL/dopa
-			const float dLd_domega = Wd * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc);
-
-			const float dLd_domega_new = Wd * (ndc_m * ndc_m * (P_start - omega) + (Q2Q_start - omega * ndc_m * ndc_m) - 2 * ndc_m * (Q_start - omega * ndc_m));
-
+			const float dLd_domega = Wd * (ndc_m * ndc_m * (P_start - omega) + (Q2Q_start - omega * ndc_m * ndc_m) - 2 * ndc_m * (Q_start - omega * ndc_m));
 			
 			// if ((dLd_domega_new - accum_dLdomega_rec) != dLd_domega_new)
 			// {
 			// 	printf("dopa_old = %f, dLopa_new = %f\n", dLd_domega_new*T, T * (dLd_domega_new - accum_dLdomega_rec));
 			// }
 
-			dL_dopa += T * (dLd_domega_new - accum_dLdomega_rec);
-			last_dLdomega = dLd_domega_new;
+			dL_dopa += T * (dLd_domega - accum_dLdomega_rec);
+			last_dLdomega = dLd_domega;
 
-			thread_Ld += dLd_domega_new * omega;
+			thread_Ld += dLd_domega * omega;
 
 			// dL/dm
-			dL_dm = Wd * 2 * omega * ndc_m * (P_acc - Q_acc) ;
 
-			const float dL_dm_new = Wd * 2 * omega * (ndc_m * P_start - Q_start);
+			const float dL_dm = Wd * 2 * omega * (ndc_m * P_start - Q_start);
 
-			// if (dL_dm != dL_dm_new)
-			// {
-			// 	printf("dm_old = %f, dm_new = %f\n", dL_dm, dL_dm_new);
-			// }
-
-
+			
 			dm_dz = far * near / ((far - near) * intersect_c.z * intersect_c.z);
 
-			dL_dz = dL_dm_new * dm_dz;
+			dL_dz = dL_dm * dm_dz;
 
 			// dL/dp
 			// viewmatrix[2, 0], coloumn major
