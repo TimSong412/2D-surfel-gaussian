@@ -385,6 +385,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float dL_dpixel_depth;
 	float accum_alpha_rec = 0;
 	float dL_dalpha = 0.0f;
+	float accum_dLdomega_rec = 0;
 
 	float3 intersect_w;
 	float3 intersect_c;
@@ -404,6 +405,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float last_alpha = 0;
 	float last_color[C] = {0};
 	float last_depth = 0;
+	float last_dLdomega = 0;
 	float omega = 0;
 	float ndc_m = 0;
 
@@ -536,6 +538,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			accum_alpha_rec = last_alpha + (1.f - last_alpha) * accum_alpha_rec;
 			dL_dopa += (1 - accum_alpha_rec) * dL_dalpha; //- (alpha - accum_alpha_rec) * dL_dalpha;
 
+			// Propagate gradients from dLdomega to opacity
+			accum_dLdomega_rec = last_alpha * last_dLdomega + (1.f - last_alpha) * accum_dLdomega_rec;
+
 			dL_dopa *= T;
 			// Update last alpha (to be used in the next iteration)
 			last_alpha = alpha;
@@ -570,6 +575,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			glm::mat3 dL_dA_local = glm::mat3(0.0f);
 
 #ifdef Ld
+			
 
 			
 			// weight: macro Wd
@@ -590,13 +596,14 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			const float dLd_domega_new = Wd * (ndc_m * ndc_m * (P_start - omega) + (Q2Q_start - omega * ndc_m * ndc_m) - 2 * ndc_m * (Q_start - omega * ndc_m));
 
-			// printf("dL_old = %f, dL_new = %f\n", dLd_domega*T, dLd_domega_new*T);
-			// if (dLd_domega != dLd_domega_new)
+			
+			// if ((dLd_domega_new - accum_dLdomega_rec) != dLd_domega_new)
 			// {
-			// 	printf("dopa_old = %f, dLopa_new = %f\n", dLd_domega*T, dLd_domega_new*T);
+			// 	printf("dopa_old = %f, dLopa_new = %f\n", dLd_domega_new*T, T * (dLd_domega_new - accum_dLdomega_rec));
 			// }
 
-			dL_dopa += dLd_domega_new * T;
+			dL_dopa += T * (dLd_domega_new - accum_dLdomega_rec);
+			last_dLdomega = dLd_domega_new;
 
 			thread_Ld += dLd_domega_new * omega;
 

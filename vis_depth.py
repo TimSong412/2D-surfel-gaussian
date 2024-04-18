@@ -54,7 +54,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         else:
             normal = None
         
-        visualize(rendering,depth,radii,view,idx, depth_path, normal=normal, vis=v3d)
+        visualize(rendering,depth,view,idx, depth_path, normal=normal, vis=v3d)
         gt = view.original_image[0:3, :, :]
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
@@ -79,7 +79,7 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
         if not skip_test:
              render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background)
 
-def visualize(rendering,depth,radii,view,idx, depth_path, normal=None, vis: Wis3D =None):
+def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =None):
 # def visualize(idx=0):
     '''
     Input:

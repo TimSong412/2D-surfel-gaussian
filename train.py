@@ -51,11 +51,30 @@ def vis_grad(grad,xyz,idx, depth_path):
     pcd=o3d.geometry.PointCloud()
     pcd.points=o3d.utility.Vector3dVector(np.stack((X, Y, Z), axis=-1).reshape(-1, 3))
     colors = grad.expand(-1, 3).reshape(-1, 3).cpu().numpy()
-    grad_local = grad.cpu().numpy()
+    grad_local = grad.cpu().numpy().squeeze()
     # ==0 : white, >0: red, <0: blue
-    colors[grad_local>0] = np.array([1, 1, 1]) - np.array([0, 1, 1]) * grad_local[grad_local>0].reshape(-1, 1)
-    colors[grad_local<=0] = np.array([1, 1, 1]) - np.array([1, 0, 1]) * grad_local[grad_local<0].reshape(-1, 1)
+    colors[grad_local>0] = np.array([1, 1, 1]) - np.array([0, 1, 1]) * grad_local[grad_local>0].reshape(-1, 1) * 10
+    colors[grad_local<=0] = np.array([1, 1, 1]) + np.array([1, 0, 1]) * grad_local[grad_local<=0].reshape(-1, 1) * 10
 
+    colors = np.clip(colors, 0, 1)
+
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+    # o3d.visualization.draw_geometries([pcd])
+    o3d.io.write_point_cloud(os.path.join(depth_path, f"output{idx:05d}.ply"), pcd)
+
+def vis_value(value,xyz,idx, depth_path):
+    X = xyz[:, 0].detach().cpu().numpy()
+    Y = xyz[:, 1].detach().cpu().numpy()
+    Z = xyz[:, 2].detach().cpu().numpy()
+
+    os.makedirs(depth_path, exist_ok=True)
+
+    pcd=o3d.geometry.PointCloud()
+    pcd.points=o3d.utility.Vector3dVector(np.stack((X, Y, Z), axis=-1).reshape(-1, 3))
+    colors = np.ones((len(X), 3))
+    colors -= np.array([0, 1, 1]) * value.detach().cpu().numpy().reshape(-1, 1)
+
+    colors = np.clip(colors, 0, 1)
 
     pcd.colors = o3d.utility.Vector3dVector(colors)
     # o3d.visualization.draw_geometries([pcd])
@@ -133,7 +152,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # gradient clipping
         gradnorm = torch.nn.utils.clip_grad_norm_(gaussians.get_paramlist(), 2e-4)
 
-
+        # if iteration % 50 == 1:
+        #     vis_value(gaussians.get_opacity, gaussians._xyz, iteration, "./value_GT")
+        # vis_grad(gaussians._opacity.grad, gaussians._xyz, iteration, ".")
+        
         
         iter_end.record()
 
