@@ -320,8 +320,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const glm::vec3 *__restrict__ scale,
 		const glm::vec4 *__restrict__ rotation,
 		const float *__restrict__ A,
-		const float *__restrict__ ray_R,
-		const float *__restrict__ ray_S,
+		const float *__restrict__ ray_P,
+		const float *__restrict__ ray_Q,
+		const float *__restrict__ ray_Q2Q,
 		const uint32_t *__restrict__ n_contrib,
 		const float *__restrict__ dL_dpixels,
 		const float *__restrict__ dL_dpixel_depths,
@@ -383,12 +384,14 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float accum_depth_rec = 0;
 	float dL_dpixel_depth;
 	float accum_alpha_rec = 0;
-	float dL_dalpha;
+	float dL_dalpha = 0.0f;
 
 	float3 intersect_w;
 	float3 intersect_c;
-	
-	float dL_dz;
+
+	float dL_dm = 0.0f;
+	float dm_dz = 0.0f;
+	float dL_dz = 0.0f;
 
 	if (inside)
 	{
@@ -402,20 +405,19 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float last_color[C] = {0};
 	float last_depth = 0;
 	float omega = 0;
+	float ndc_m = 0;
 
 	// Gradient of pixel coordinate w.r.t. normalized
 	// screen-space viewport corrdinates (-1 to 1)
 	const float ddelx_dx = 0.5 * W;
 	const float ddely_dy = 0.5 * H;
 
-	float P_acc = 0.0f;
-	float Q_acc = 0.0f;
-	float R_acc = ray_R[pix_id];
-	float S_acc = ray_S[pix_id];
-	bool first_pass = true;
+	float P_acc = ray_P[pix_id];
+	float Q_acc = ray_Q[pix_id];
+	float Q2Q_acc = ray_Q2Q[pix_id];
 
-	const float R_start = R_acc;
-	const float S_start = S_acc;
+	const float P_start = P_acc;
+	const float Q_start = Q_acc;
 
 	float thread_Ld = 0.0f;
 
@@ -443,7 +445,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				collected_origin[block.thread_rank() * 3 + j] = orig_points[coll_id * 3 + j];
 			collected_scale[block.thread_rank()] = scale[coll_id];
 			collected_rotation[block.thread_rank()] = rotation[coll_id];
-			
 		}
 		block.sync();
 
@@ -460,7 +461,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float2 xy = collected_xy[j];
 			const float2 d = {xy.x - pixf.x, xy.y - pixf.y};
 			const float4 con_o = collected_conic_opacity[j];
-			
 
 			float hu_1 = -1.0f * collected_A[j * 9 + 0] + pix_cam.x * collected_A[j * 9 + 6];
 			float hu_2 = -1.0f * collected_A[j * 9 + 1] + pix_cam.x * collected_A[j * 9 + 7];
@@ -489,7 +489,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			float alpha = min(0.99f, con_o.w * G_hat);
 
-			if (intersect_c.z < 0) 
+			if (intersect_c.z <= 0)
 				continue;
 
 			if (alpha < 1.0f / 255.0f)
@@ -541,7 +541,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				bg_dot_dpixel += bg_color[i] * dL_dpixel[i];
 			dL_dopa += (-T_final / (1.f - alpha)) * bg_dot_dpixel;
 
-
 			const float dG_du = -u * G_hat;
 			const float dG_dv = -v * G_hat;
 
@@ -564,37 +563,35 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// A is AT here
 			glm::mat3 dL_dA_local = glm::mat3(0.0f);
 
-
 #ifdef Ld
 
-			if (G_hat != G_xc) {
+			if (G_u >= G_xc)
+			{
 				// weight: macro Wd
 				// update PQRS
-				if (!first_pass) {
-					omega = alpha * T;
-					P_acc += omega * intersect_c.z;
-					Q_acc += omega;
-					R_acc -= omega * intersect_c.z;
-					S_acc -= omega;
-				}
-				first_pass = false;
+				ndc_m = z2ndc(intersect_c.z);
+				omega = alpha * T;
+				P_acc -= omega;
+				Q_acc -= omega * ndc_m;
+				Q2Q_acc -= omega * ndc_m * ndc_m;
 
 				// if (blockIdx.x == 0 && blockIdx.y == 64 && threadIdx.x == 0 && threadIdx.y == 12)
-			// {
-			// 	printf("backward contributor = %d, z= %f, R_acc = %f\n", contributor, intersect_c.z, R_acc);
+				// {
+				// 	printf("backward contributor = %d, z= %f, R_acc = %f\n", contributor, intersect_c.z, R_acc);
 				// }
 
+				// dL/domega = dL/dopa
+				const float dLd_domega = Wd * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc);
+				dL_dopa += dLd_domega * T;
 
-				//dL/domega = dL/dopa
-				const float dLd_domega = Wd * (P_acc - Q_acc * intersect_c.z + S_acc * intersect_c.z - R_acc);
-				dL_dopa +=  dLd_domega*T;
-				
-				thread_Ld += dLd_domega * alpha * T;
+				thread_Ld += dLd_domega * omega;
 
+				// dL/dm
+				dL_dm = Wd * 2 * omega * ndc_m * (P_acc - Q_acc);
 
-				// dz/dp
+				dm_dz = far * near / ((far - near) * intersect_c.z * intersect_c.z);
 
-				dL_dz = Wd * alpha * T * (S_acc - Q_acc);
+				dL_dz = dL_dm * dm_dz;
 
 				// dL/dp
 				// viewmatrix[2, 0], coloumn major
@@ -612,8 +609,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				float dz_dsv = 0;
 				for (int k = 0; k < 3; k++)
 				{
-					dz_dsu += viewmatrix[8+k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
-					dz_dsv += viewmatrix[8+k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
+					dz_dsu += viewmatrix[8 + k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
+					dz_dsv += viewmatrix[8 + k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
 				}
 
 				atomicAdd(&dL_dscale[global_id].x, dL_dz * dz_dsu);
@@ -638,7 +635,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				const float dLd_dx = 2.0f * (y * (dL_dtu1 + dL_dtv0) + z * dL_dtu2 + r * dL_dtv2 - 2.0f * x * dL_dtv1);
 				const float dLd_dy = 2.0f * (x * (dL_dtu1 + dL_dtv0) - r * dL_dtu2 + z * dL_dtv2 - 2.0f * y * dL_dtu0);
 				const float dLd_dz = 2.0f * (r * (dL_dtu1 - dL_dtv0) + x * dL_dtu2 + y * dL_dtv2 - 2.0f * z * (dL_dtu0 + dL_dtv1));
-				
+
 				atomicAdd(&dL_drot[global_id].x, dLd_dr);
 				atomicAdd(&dL_drot[global_id].y, dLd_dx);
 				atomicAdd(&dL_drot[global_id].z, dLd_dy);
@@ -646,16 +643,16 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 				// dL/dA
 
-				float dz_du = collected_STuv[j * 6 + 0]*viewmatrix[8] + collected_STuv[j * 6 + 1]*viewmatrix[9] + collected_STuv[j * 6 + 2]*viewmatrix[10];
-				float dz_dv = collected_STuv[j * 6 + 3]*viewmatrix[8] + collected_STuv[j * 6 + 4]*viewmatrix[9] + collected_STuv[j * 6 + 5]*viewmatrix[10];
+				float dz_du = collected_STuv[j * 6 + 0] * viewmatrix[8] + collected_STuv[j * 6 + 1] * viewmatrix[9] + collected_STuv[j * 6 + 2] * viewmatrix[10];
+				float dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[8] + collected_STuv[j * 6 + 4] * viewmatrix[9] + collected_STuv[j * 6 + 5] * viewmatrix[10];
 
 				/*
-				same as the original but replace 
+				same as the original but replace
 											dL/dG with dL/dz
 											dG/du with dz/du
 											dG/dv with dz/dv
 				*/
-				
+
 				dL_dA_local[0][0] += dL_dz * (dz_du * (-du_dhu1) + dz_dv * (-dv_dhu1));
 				dL_dA_local[0][1] += dL_dz * (dz_du * (-du_dhv1) + dz_dv * (-dv_dhv1));
 				dL_dA_local[0][2] += dL_dz * (dz_du * (du_dhu1 * pix_cam.x + du_dhv1 * pix_cam.y) + dz_dv * (dv_dhu1 * pix_cam.x + dv_dhv1 * pix_cam.y));
@@ -665,11 +662,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				dL_dA_local[2][0] += dL_dz * (dz_du * (-du_dhu3) + dz_dv * (-dv_dhu3));
 				dL_dA_local[2][1] += dL_dz * (dz_du * (-du_dhv3) + dz_dv * (-dv_dhv3));
 				dL_dA_local[2][2] += dL_dz * (dz_du * (du_dhu3 * pix_cam.x + du_dhv3 * pix_cam.y) + dz_dv * (dv_dhu3 * pix_cam.x + dv_dhv3 * pix_cam.y));
-
 			}
 
 #endif
-
 
 			// Margin cases
 			// dL_dpx = dL_dG * dG_dpx, dL_dG = con_o.w * dL_dopa
@@ -679,7 +674,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// Helpful reusable temporary variables
 			const float dL_dG = G_u >= G_xc ? con_o.w * dL_dopa : 0.f;
 
-			
 			// WARNING: transpose
 			dL_dA_local[0][0] += dL_dG * (dG_du * (-du_dhu1) + dG_dv * (-dv_dhu1));
 			dL_dA_local[0][1] += dL_dG * (dG_du * (-du_dhv1) + dG_dv * (-dv_dhv1));
@@ -717,24 +711,20 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&(dL_dA[global_id * 9 + 6]), dL_dA_local[2][0]);
 			atomicAdd(&(dL_dA[global_id * 9 + 7]), dL_dA_local[2][1]);
 			atomicAdd(&(dL_dA[global_id * 9 + 8]), dL_dA_local[2][2]);
-
 		}
-		
 	}
-	float diff = glm::abs(R_acc - 0.0f);
-	if (diff > 0.1f && inside)
+	float diff = glm::abs(P_acc - 0.0f);
+	if (diff > 0.01f && inside)
 	{
-		printf("R_start: %f, R_acc: %f, bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", R_start, R_acc, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
+		printf("P_start: %f, P_acc: %f, bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", P_start, P_acc, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
 	}
-	diff = glm::abs(S_acc - 0.0f);
-	if (diff > 0.1f && inside)
+	diff = glm::abs(Q_acc - 0.0f);
+	if (diff > 0.01f && inside)
 	{
-		printf("S_start: %f\n", S_start);
-		printf("S_acc: %f\n", S_acc);
+		printf("Q_start: %f, Q_acc: %f, bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", Q_start, Q_acc, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
 	}
 
 	atomicAdd(Ld_value, thread_Ld);
-	
 }
 
 void BACKWARD::preprocess(
@@ -810,8 +800,9 @@ void BACKWARD::render(
 	const glm::vec3 *scale,
 	const glm::vec4 *rotation,
 	const float *A,
-	const float *ray_R,
-	const float *ray_S,
+	const float *ray_P,
+	const float *ray_Q,
+	const float *ray_Q2Q,
 	const uint32_t *n_contrib,
 	const float *dL_dpixels,
 	const float *dL_dpixel_depths,
@@ -848,8 +839,9 @@ void BACKWARD::render(
 		scale,
 		rotation,
 		A,
-		ray_R,
-		ray_S,
+		ray_P,
+		ray_Q,
+		ray_Q2Q,
 		n_contrib,
 		dL_dpixels,
 		dL_dpixel_depths,
@@ -867,5 +859,4 @@ void BACKWARD::render(
 		Ld_value);
 	// cudaMemcpy(&Ld_value, Ld_value_d, sizeof(float), cudaMemcpyDeviceToHost);
 	// cudaFree(Ld_value_d);
-		
 }

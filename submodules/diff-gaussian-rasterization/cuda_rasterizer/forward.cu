@@ -365,8 +365,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		float *__restrict__ out_color,
 		float *__restrict__ out_depth,
 		float *__restrict__ out_normal,
-		float *__restrict__ ray_R,
-		float *__restrict__ ray_S)
+		float *__restrict__ ray_P,
+		float *__restrict__ ray_Q,
+		float *__restrict__ ray_Q2Q)
 {
 	// Identify current tile and associated min/max pixel range.
 	auto block = cg::this_thread_block();
@@ -410,10 +411,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float3 intersect_w;
 	float3 intersect_c;
 	float3 normal_intersect;
-	float R_acc = 0.0f;
-	float S_acc = 0.0f;
-	float last_omega = 0.0f;
-	float last_z = 0.0f;
+	float P_acc = 0.0f;
+	float Q_acc = 0.0f;
+	float Q2Q_acc = 0.0f;
+	float omega = 0.0f;
+	float ndc_m = 0.0f;
 
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
@@ -481,7 +483,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 						   collected_origin[j * 3 + 2] + collected_STuv[j * 6 + 2] * u + collected_STuv[j * 6 + 5] * v};
 			intersect_c = transformPoint4x3(intersect_w, viewmatrix);
 
-			if (intersect_c.z < 0) 
+			if (intersect_c.z <= 0) 
 				continue;
 
 			G_u = max(G_u, G_xc);
@@ -517,19 +519,21 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				// n_i = {collected_normal[j * 3 + 0], collected_normal[j * 3 + 1], collected_normal[j * 3 + 2]};
 			}
 
-			if (G_u != G_xc) {
-				R_acc += last_omega * last_z;
-				S_acc += last_omega;
+			if (G_u >= G_xc) {
+				ndc_m = z2ndc(intersect_c.z);
+				omega = alpha * T;
+				P_acc += omega;
+				Q_acc += omega * ndc_m;
+				Q2Q_acc += omega * ndc_m * ndc_m;
 
 
 				if (intersect_c.z > 1000)
 				{
-					printf("forward contributor = %d, z= %f, R_acc= %f\n", contributor, intersect_c.z, R_acc);
+					printf("forward contributor = %d, z= %f, Q_acc= %f\n", contributor, intersect_c.z, Q_acc);
 					printf("Gu %f G_xc %f\n", G_u, G_xc);
 				}
 
-				last_omega = alpha * T;
-				last_z = intersect_c.z;
+		
 				// if (intersect_c.z < 0 && inside){
 				// 	printf("%f at bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", intersect_c.z, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
 				// }
@@ -560,8 +564,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		out_normal[0 * H * W + pix_id] = normal_intersect.x;
 		out_normal[1 * H * W + pix_id] = normal_intersect.y;
 		out_normal[2 * H * W + pix_id] = normal_intersect.z;
-		ray_R[pix_id] = R_acc;
-		ray_S[pix_id] = S_acc;
+		ray_P[pix_id] = P_acc;
+		ray_Q[pix_id] = Q_acc;
+		ray_Q2Q[pix_id] = Q2Q_acc;
 	}
 }
 
@@ -587,8 +592,9 @@ void FORWARD::render(
 	float *out_color,
 	float *out_depth,
 	float *out_normal,
-	float *ray_R,
-	float *ray_S)
+	float *ray_P,
+	float *ray_Q,
+	float *ray_Q2Q)
 {
 	renderCUDA<NUM_CHANNELS><<<grid, block>>>(
 		ranges,
@@ -611,8 +617,9 @@ void FORWARD::render(
 		out_color,
 		out_depth,
 		out_normal,
-		ray_R,
-		ray_S);
+		ray_P,
+		ray_Q,
+		ray_Q2Q);
 }
 
 void FORWARD::preprocess(int P, int D, int M,

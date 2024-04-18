@@ -18,5 +18,7 @@
 
 #define Ld
 #define Wd 1.0f
+#define far 1000.0f
+#define near 0.2f
 
 #endif

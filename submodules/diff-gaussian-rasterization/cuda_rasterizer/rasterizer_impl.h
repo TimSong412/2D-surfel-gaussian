@@ -53,8 +53,9 @@ namespace CudaRasterizer
 		uint32_t *n_contrib;
 
 
-		float *ray_R;
-		float *ray_S;
+		float *ray_P;
+		float *ray_Q;
+		float *ray_Q2Q;
 
 		static ImageState fromChunk(char *&chunk, size_t N);
 	};

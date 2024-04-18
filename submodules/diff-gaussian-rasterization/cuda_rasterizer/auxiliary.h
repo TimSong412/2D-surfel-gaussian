@@ -38,6 +38,11 @@ __device__ const float SH_C3[] = {
 	-0.5900435899266435f
 };
 
+__forceinline__ __device__ float z2ndc(float z)
+{
+	return (z - near) / (far - near) * far / z;
+}
+
 __forceinline__ __device__ float ndc2Pix(float v, int S)
 {
 	return ((v + 1.0) * S - 1.0) * 0.5;

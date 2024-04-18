@@ -179,8 +179,9 @@ CudaRasterizer::ImageState CudaRasterizer::ImageState::fromChunk(char *&chunk, s
 	ImageState img;
 	obtain(chunk, img.n_contrib, N, 128);
 	obtain(chunk, img.ranges, N, 128);
-	obtain(chunk, img.ray_R, N, 128);
-	obtain(chunk, img.ray_S, N, 128);
+	obtain(chunk, img.ray_Q, N, 128);
+	obtain(chunk, img.ray_P, N, 128);
+	obtain(chunk, img.ray_Q2Q, N, 128);
 
 	return img;
 }
@@ -355,8 +356,9 @@ int CudaRasterizer::Rasterizer::forward(
 				   out_color,
 				   out_depth,
 				   out_normal,
-				   imgState.ray_R,
-				   imgState.ray_S),
+				   imgState.ray_P,
+				   imgState.ray_Q,
+				   imgState.ray_Q2Q),
 			   debug);
 
 	return num_rendered;
@@ -441,8 +443,9 @@ void CudaRasterizer::Rasterizer::backward(
 				   (glm::vec3 *)scales,
 				   (glm::vec4 *)rotations,
 				   geomState.A,
-				   imgState.ray_R,
-				   imgState.ray_S,
+				   imgState.ray_P,
+				   imgState.ray_Q,
+				   imgState.ray_Q2Q,
 				   imgState.n_contrib,
 				   dL_dpix,
 				   dL_dpix_depth,
