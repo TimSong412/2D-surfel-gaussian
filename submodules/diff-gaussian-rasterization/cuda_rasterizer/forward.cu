@@ -398,7 +398,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	__shared__ float collected_A[BLOCK_SIZE * 9];
 	__shared__ float collected_STuv[BLOCK_SIZE * 6];
 	__shared__ float collected_origin[BLOCK_SIZE * 3];
-	__shared__ float3 collected_normal[BLOCK_SIZE];	
+	__shared__ float3 collected_normal[BLOCK_SIZE];
 	// __shared__ float collected_normal[BLOCK_SIZE * 3];
 
 	// Initialize helper variables
@@ -432,7 +432,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		{
 			int coll_id = point_list[range.x + progress];
 			collected_id[block.thread_rank()] = coll_id;
-			
+
 			collected_xy[block.thread_rank()] = points_xy_image[coll_id];
 			collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
 			for (int j = 0; j < 9; j++)
@@ -456,8 +456,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			float2 xy = collected_xy[j];
 			float2 d = {xy.x - pixf.x, xy.y - pixf.y};
 			float4 con_o = collected_conic_opacity[j];
-			
-
 
 			// hx = [-1, 0, pix_cam.x], hy = [0, -1, pix_cam.y]
 			// hu = A^T * hx, hv = A^T * hy
@@ -483,26 +481,21 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 						   collected_origin[j * 3 + 2] + collected_STuv[j * 6 + 2] * u + collected_STuv[j * 6 + 5] * v};
 			intersect_c = transformPoint4x3(intersect_w, viewmatrix);
 
-
-			
-
 			float G_hat = max(G_u, G_xc);
 			// G_u = G_xc;
 
 			float alpha = min(0.99f, con_o.w * G_hat);
-
 
 			// if (blockIdx.x == 49 && blockIdx.y == 10 && threadIdx.x == 6 && threadIdx.y == 14 && contributor == 50)
 			// {
 			// 	printf("forward contributor = %d, z= %f, G_u = %f, G_xc = %f, alpha = %f\n", contributor, intersect_c.z, G_u, G_xc, alpha);
 			// }
 
-			if (intersect_c.z <= 0) 
+			if (intersect_c.z <= 0)
 				continue;
 
 			if (alpha < 1.0f / 255.0f)
 				continue;
-
 
 			float test_T = T * (1 - alpha);
 			if (test_T < 0.0001f)
@@ -528,40 +521,28 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				// n_i = {collected_normal[j * 3 + 0], collected_normal[j * 3 + 1], collected_normal[j * 3 + 2]};
 			}
 
-			if (G_u >= G_xc) {
+			// if (blockIdx.x == 49 && blockIdx.y == 10 && threadIdx.x == 6 && threadIdx.y == 14)
+			// {
+			// 	printf("forward contributor = %d, z= %f, P_acc= %f\n", contributor, intersect_c.z, P_acc);
+			// 	// printf("Gu %f G_xc %f\n", G_u, G_xc);
+			// }
 
+			ndc_m = z2ndc(intersect_c.z);
+			omega = alpha * T;
+			P_acc += omega;
+			Q_acc += omega * ndc_m;
+			Q2Q_acc += omega * ndc_m * ndc_m;
 
-				// if (blockIdx.x == 49 && blockIdx.y == 10 && threadIdx.x == 6 && threadIdx.y == 14)
-				// {
-				// 	printf("forward contributor = %d, z= %f, P_acc= %f\n", contributor, intersect_c.z, P_acc);
-				// 	// printf("Gu %f G_xc %f\n", G_u, G_xc);
-				// }
+			// if (intersect_c.z < 0 && inside){
+			// 	printf("%f at bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", intersect_c.z, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
+			// }
+			// assert(last_z >= 0 || !inside);
 
-
-				ndc_m = z2ndc(intersect_c.z);
-				omega = alpha * T;
-				P_acc += omega;
-				Q_acc += omega * ndc_m;
-				Q2Q_acc += omega * ndc_m * ndc_m;
-
-
-				
-
-		
-				// if (intersect_c.z < 0 && inside){
-				// 	printf("%f at bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", intersect_c.z, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
-				// }
-				// assert(last_z >= 0 || !inside);
-
-			}
-
-			
 			T = test_T;
 
 			// Keep track of last range entry to update this
 			// pixel.
 			last_contributor = contributor;
-			
 		}
 	}
 
