@@ -491,7 +491,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// 	printf("forward contributor = %d, z= %f, G_u = %f, G_xc = %f, alpha = %f\n", contributor, intersect_c.z, G_u, G_xc, alpha);
 			// }
 
-			if (intersect_c.z <= 0)
+			if (intersect_c.z <= near)
 				continue;
 
 			if (alpha < 1.0f / 255.0f)
@@ -534,7 +534,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			Q2Q_acc += omega * ndc_m * ndc_m;
 
 			// if (intersect_c.z < 0 && inside){
-			// 	printf("%f at bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", intersect_c.z, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
+				// 	printf("%f at bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", intersect_c.z, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
 			// }
 			// assert(last_z >= 0 || !inside);
 
