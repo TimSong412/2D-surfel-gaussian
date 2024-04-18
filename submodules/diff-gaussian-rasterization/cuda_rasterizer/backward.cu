@@ -489,6 +489,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			float alpha = min(0.99f, con_o.w * G_hat);
 
+			// if (blockIdx.x == 49 && blockIdx.y == 10 && threadIdx.x == 6 && threadIdx.y == 14 && contributor == 49)
+			// {
+			// 	printf("backward contributor = %d, z= %f, G_u = %f, G_xc = %f, alpha = %f\n", contributor, intersect_c.z, G_u, G_xc, alpha);
+			// }
+
 			if (intersect_c.z <= 0)
 				continue;
 
@@ -575,9 +580,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				Q_acc -= omega * ndc_m;
 				Q2Q_acc -= omega * ndc_m * ndc_m;
 
-				// if (blockIdx.x == 0 && blockIdx.y == 64 && threadIdx.x == 0 && threadIdx.y == 12)
+				// if (blockIdx.x == 49 && blockIdx.y == 10 && threadIdx.x == 6 && threadIdx.y == 14)
 				// {
-				// 	printf("backward contributor = %d, z= %f, R_acc = %f\n", contributor, intersect_c.z, R_acc);
+				// 	printf("backward contributor = %d, z= %f, P_acc = %f\n", contributor, intersect_c.z, P_acc);
 				// }
 
 				// dL/domega = dL/dopa

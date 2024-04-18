@@ -483,13 +483,22 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 						   collected_origin[j * 3 + 2] + collected_STuv[j * 6 + 2] * u + collected_STuv[j * 6 + 5] * v};
 			intersect_c = transformPoint4x3(intersect_w, viewmatrix);
 
-			if (intersect_c.z <= 0) 
-				continue;
 
-			G_u = max(G_u, G_xc);
+			
+
+			float G_hat = max(G_u, G_xc);
 			// G_u = G_xc;
 
-			float alpha = min(0.99f, con_o.w * G_u);
+			float alpha = min(0.99f, con_o.w * G_hat);
+
+
+			// if (blockIdx.x == 49 && blockIdx.y == 10 && threadIdx.x == 6 && threadIdx.y == 14 && contributor == 50)
+			// {
+			// 	printf("forward contributor = %d, z= %f, G_u = %f, G_xc = %f, alpha = %f\n", contributor, intersect_c.z, G_u, G_xc, alpha);
+			// }
+
+			if (intersect_c.z <= 0) 
+				continue;
 
 			if (alpha < 1.0f / 255.0f)
 				continue;
@@ -520,6 +529,15 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			}
 
 			if (G_u >= G_xc) {
+
+
+				// if (blockIdx.x == 49 && blockIdx.y == 10 && threadIdx.x == 6 && threadIdx.y == 14)
+				// {
+				// 	printf("forward contributor = %d, z= %f, P_acc= %f\n", contributor, intersect_c.z, P_acc);
+				// 	// printf("Gu %f G_xc %f\n", G_u, G_xc);
+				// }
+
+
 				ndc_m = z2ndc(intersect_c.z);
 				omega = alpha * T;
 				P_acc += omega;
@@ -527,11 +545,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				Q2Q_acc += omega * ndc_m * ndc_m;
 
 
-				if (intersect_c.z > 1000)
-				{
-					printf("forward contributor = %d, z= %f, Q_acc= %f\n", contributor, intersect_c.z, Q_acc);
-					printf("Gu %f G_xc %f\n", G_u, G_xc);
-				}
+				
 
 		
 				// if (intersect_c.z < 0 && inside){
