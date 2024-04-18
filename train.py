@@ -23,11 +23,46 @@ from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
+from utils.graphics_utils import fov2focal
+import open3d as o3d
+import numpy as np
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
 except ImportError:
     TENSORBOARD_FOUND = False
+
+# vis_grad(gaussians._opacity.grad, gaussians._xyz, iteration, ".")
+
+def vis_grad(grad,xyz,idx, depth_path):
+# def visualize(idx=0):
+    '''
+    Input:
+    rendering: (1,H,W) tensor
+    depth: (1,H,W) tensor
+    K: (4,4) tensor
+    '''
+    
+    
+    X = xyz[:, 0].detach().cpu().numpy()
+    Y = xyz[:, 1].detach().cpu().numpy()
+    Z = xyz[:, 2].detach().cpu().numpy()
+
+    pcd=o3d.geometry.PointCloud()
+    pcd.points=o3d.utility.Vector3dVector(np.stack((X, Y, Z), axis=-1).reshape(-1, 3))
+    colors = grad.expand(-1, 3).reshape(-1, 3).cpu().numpy()
+    grad_local = grad.cpu().numpy()
+    # ==0 : white, >0: red, <0: blue
+    colors[grad_local>0] = np.array([1, 1, 1]) - np.array([0, 1, 1]) * grad_local[grad_local>0].reshape(-1, 1)
+    colors[grad_local<=0] = np.array([1, 1, 1]) - np.array([1, 0, 1]) * grad_local[grad_local<0].reshape(-1, 1)
+
+
+    pcd.colors = o3d.utility.Vector3dVector(colors)
+    # o3d.visualization.draw_geometries([pcd])
+    o3d.io.write_point_cloud(os.path.join(depth_path, f"output{idx:05d}.ply"), pcd)
+ 
+
+
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
     first_iter = 0
@@ -95,7 +130,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         Ll1 = l1_loss(image, gt_image)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
         loss.backward()
+        # gradient clipping
+        gradnorm = torch.nn.utils.clip_grad_norm_(gaussians.get_paramlist(), 2e-4)
 
+
+        
         iter_end.record()
 
         with torch.no_grad():
@@ -108,7 +147,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 progress_bar.close()
 
             # Log and save
-            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), Ld_value/(viewpoint_cam.image_height * viewpoint_cam.image_width))
+            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), Ld_value/(viewpoint_cam.image_height * viewpoint_cam.image_width), gradnorm)
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
@@ -121,7 +160,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
+                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.05, scene.cameras_extent, size_threshold)
                 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
@@ -159,7 +198,7 @@ def prepare_output_and_logger(args):
         print("Tensorboard not available: not logging progress")
     return tb_writer
 
-def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs, Ld_value):
+def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs, Ld_value, gradnorm):
     if tb_writer:
         tb_writer.add_scalar('train_loss_patches/l1_loss', Ll1.item(), iteration)
         tb_writer.add_scalar('train_loss_patches/total_loss', loss.item(), iteration)
@@ -168,6 +207,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
         tb_writer.add_scalar('total_points', scene.gaussians.get_xyz.shape[0], iteration)
         tb_writer.add_scalar('mean_opacity', scene.gaussians.get_opacity.mean(), iteration)
         tb_writer.add_scalar('mean_xyz_grad_mean', scene.gaussians.get_xyz.grad.norm(dim=1).mean(), iteration)
+        tb_writer.add_scalar('grad_norm', gradnorm, iteration)
         if hasattr(scene.gaussians, "clone_pts_num"):
             tb_writer.add_scalar('densify/clone', scene.gaussians.clone_pts_num, iteration)
             tb_writer.add_scalar('densify/split', scene.gaussians.split_pts_num, iteration)

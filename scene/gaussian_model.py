@@ -257,6 +257,9 @@ class GaussianModel:
         self._rotation = nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True))
 
         self.active_sh_degree = self.max_sh_degree
+    
+    def get_paramlist(self):
+        return [self._xyz, self._features_dc, self._features_rest, self._scaling, self._rotation, self._opacity]
 
     def replace_tensor_to_optimizer(self, tensor, name):
         optimizable_tensors = {}
