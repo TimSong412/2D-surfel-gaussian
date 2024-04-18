@@ -495,7 +495,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// 	printf("backward contributor = %d, z= %f, G_u = %f, G_xc = %f, alpha = %f\n", contributor, intersect_c.z, G_u, G_xc, alpha);
 			// }
 
-			if (intersect_c.z <= 0)
+			if (intersect_c.z <= near)
 				continue;
 
 			if (alpha < 1.0f / 255.0f)
