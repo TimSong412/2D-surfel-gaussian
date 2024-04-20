@@ -599,16 +599,17 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			Q2Q_acc -= omega * ndc_m * ndc_m;
 
 			// dL/domega = dL/dopa
-			const float dLd_domega = Wd * (ndc_m * ndc_m * P_start + Q2Q_start - 2 * ndc_m * Q_start);
+			const float dLd_domega = Wd * (ndc_m * ndc_m * P_start + Q2Q_start - 2 * ndc_m * Q_start) / (W * H);
 
 			dL_dopa += (T * (dLd_domega - accum_dLdomega_rec));
 			last_dLdomega = dLd_domega;
 
-			thread_Ld += Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc));
+			thread_Ld += Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)) / (W * H);
 
 			// dL/dm
 
-			const float dL_dm = Wd * 2 * omega * (ndc_m * P_start - Q_start);
+			const float dL_dm = Wd * 2 * omega * (ndc_m * P_start - Q_start) / (W * H);
+
 
 
 			dm_dz = 2 * far * near / ((far - near) * intersect_c.z * intersect_c.z);

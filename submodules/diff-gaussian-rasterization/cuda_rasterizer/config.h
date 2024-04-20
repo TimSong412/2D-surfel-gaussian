@@ -17,7 +17,7 @@
 #define BLOCK_Y 16
 
 #define Ld
-#define Wd 1.0f
+#define Wd 100.0f
 #define far 1000.0f
 #define near 0.2f
 
