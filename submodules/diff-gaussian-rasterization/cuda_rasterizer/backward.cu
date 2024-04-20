@@ -387,6 +387,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float dL_dalpha = 0.0f;
 	float accum_dLdomega_rec = 0;
 
+	float P_acc = 0.0f;
+	float Q_acc = 0.0f;
+	float Q2Q_acc = 0.0f;
+
+	
 	float3 intersect_w;
 	float3 intersect_c;
 
@@ -399,6 +404,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dL_dpixel[i] = dL_dpixels[i * H * W + pix_id];
 		dL_dpixel_depth = dL_dpixel_depths[pix_id];
 		dL_dalpha = dL_dalphas[pix_id];
+		P_acc = ray_P[pix_id];
+		Q_acc = ray_Q[pix_id];
+		Q2Q_acc = ray_Q2Q[pix_id];
 	}
 
 	float last_alpha = 0;
@@ -413,13 +421,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	const float ddelx_dx = 0.5 * W;
 	const float ddely_dy = 0.5 * H;
 
-	float P_acc = ray_P[pix_id];
-	float Q_acc = ray_Q[pix_id];
-	float Q2Q_acc = ray_Q2Q[pix_id];
-
 	const float P_start = P_acc;
 	const float Q_start = Q_acc;
 	const float Q2Q_start = Q2Q_acc;
+
 
 	float thread_Ld = 0.0f;
 
@@ -581,24 +586,27 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// update PQRS
 			ndc_m = z2ndc(intersect_c.z);
 			omega = alpha * T;
-			P_acc -= omega;
-			Q_acc -= omega * ndc_m;
-			Q2Q_acc -= omega * ndc_m * ndc_m;
+			// P_acc -= omega;
+			// Q_acc -= omega * ndc_m;
+			// Q2Q_acc -= omega * ndc_m * ndc_m;
 
-			// if (blockIdx.x == 49 && blockIdx.y == 10 && threadIdx.x == 6 && threadIdx.y == 14)
+			
+
+			// if (blockIdx.x == 30 && blockIdx.y == 30 && threadIdx.x == 6 && threadIdx.y == 14)
 			// {
-			// 	printf("backward contributor = %d, z= %f, P_acc = %f\n", contributor, intersect_c.z, P_acc);
+			// 	printf("backward contributor = %d, z= %f, m = %f\n", contributor, intersect_c.z, ndc_m);
 			// }
 
 			// dL/domega = dL/dopa
-			const float dLd_domega = Wd * (ndc_m * ndc_m * (P_start - omega) + (Q2Q_start - omega * ndc_m * ndc_m) - 2 * ndc_m * (Q_start - omega * ndc_m));
+			const float dLd_domega = Wd * (ndc_m * ndc_m * P_start + Q2Q_start - 2 * ndc_m * Q_start);
+			
 			
 			// if ((dLd_domega_new - accum_dLdomega_rec) != dLd_domega_new)
 			// {
 			// 	printf("dopa_old = %f, dLopa_new = %f\n", dLd_domega_new*T, T * (dLd_domega_new - accum_dLdomega_rec));
 			// }
 
-			dL_dopa += T * (dLd_domega - accum_dLdomega_rec);
+			dL_dopa += (T * (dLd_domega - accum_dLdomega_rec));
 			last_dLdomega = dLd_domega;
 
 			thread_Ld += dLd_domega * omega;
@@ -608,7 +616,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float dL_dm = Wd * 2 * omega * (ndc_m * P_start - Q_start);
 
 			
-			dm_dz = far * near / ((far - near) * intersect_c.z * intersect_c.z);
+			dm_dz = 2 * far * near / ((far - near) * intersect_c.z * intersect_c.z);
+			// dm_dz = 2.0f / (far - near);
 
 			dL_dz = dL_dm * dm_dz;
 
@@ -732,16 +741,16 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&(dL_dA[global_id * 9 + 8]), dL_dA_local[2][2]);
 		}
 	}
-	float diff = glm::abs(P_acc - 0.0f);
-	if (diff > 0.01f && inside)
-	{
-		printf("P_start: %f, P_acc: %f, bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", P_start, P_acc, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
-	}
-	diff = glm::abs(Q_acc - 0.0f);
-	if (diff > 0.01f && inside)
-	{
-		printf("Q_start: %f, Q_acc: %f, bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", Q_start, Q_acc, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
-	}
+	// float diff = glm::abs(P_acc - 0.0f);
+	// if (diff > 0.01f && inside)
+	// {
+	// 	printf("P_start: %f, P_acc: %f, bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", P_start, P_acc, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
+	// }
+	// diff = glm::abs(Q_acc - 0.0f);
+	// if (diff > 0.01f && inside)
+	// {
+	// 	printf("Q_start: %f, Q_acc: %f, bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", Q_start, Q_acc, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
+	// }
 
 	atomicAdd(Ld_value, thread_Ld);
 }
