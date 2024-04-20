@@ -367,7 +367,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		float *__restrict__ out_normal,
 		float *__restrict__ ray_P,
 		float *__restrict__ ray_Q,
-		float *__restrict__ ray_Q2Q)
+		float *__restrict__ ray_Q2Q,
+		float *__restrict__ ray_M)
 {
 	// Identify current tile and associated min/max pixel range.
 	auto block = cg::this_thread_block();
@@ -603,7 +604,8 @@ void FORWARD::render(
 	float *out_normal,
 	float *ray_P,
 	float *ray_Q,
-	float *ray_Q2Q)
+	float *ray_Q2Q,
+	float *ray_M)
 {
 	renderCUDA<NUM_CHANNELS><<<grid, block>>>(
 		ranges,
@@ -628,7 +630,8 @@ void FORWARD::render(
 		out_normal,
 		ray_P,
 		ray_Q,
-		ray_Q2Q);
+		ray_Q2Q,
+		ray_M);
 }
 
 void FORWARD::preprocess(int P, int D, int M,

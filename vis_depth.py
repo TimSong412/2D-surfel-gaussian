@@ -53,7 +53,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
             normal = render_pkg["normal"]
         else:
             normal = None
-        
+        depth = torch.clamp(depth, 0, 10)
         visualize(rendering,depth,view,idx, depth_path, normal=normal, vis=v3d)
         gt = view.original_image[0:3, :, :]
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))

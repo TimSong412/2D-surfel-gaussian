@@ -52,6 +52,8 @@ namespace CudaRasterizer
 			float* out_depth,
 			float* out_alpha,
 			float* out_normal,
+			float* out_P,
+			float* out_M,
 			int* radii = nullptr,
 			bool debug = false);
 
@@ -78,6 +80,9 @@ namespace CudaRasterizer
 			const float* dL_dpix,
 			const float* dL_dpix_depth,
 			const float* dL_dalphas,
+			const float* dL_dnormals,
+			const float* dL_dP,
+			const float* dL_dM,
 			float* dL_dmean2D,
 			float* dL_dconic,
 			float* dL_dopacity,
