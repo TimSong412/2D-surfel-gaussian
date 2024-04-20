@@ -391,7 +391,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float Q_acc = 0.0f;
 	float Q2Q_acc = 0.0f;
 
-	
 	float3 intersect_w;
 	float3 intersect_c;
 
@@ -424,7 +423,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	const float P_start = P_acc;
 	const float Q_start = Q_acc;
 	const float Q2Q_start = Q2Q_acc;
-
 
 	float thread_Ld = 0.0f;
 
@@ -502,10 +500,22 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// }
 
 			if (intersect_c.z <= near)
+			{
+				if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
+				{
+					printf("backward contributor = %d, close\n");
+				}
 				continue;
+			}
 
 			if (alpha < 1.0f / 255.0f)
+			{
+				if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
+				{
+					printf("backward contributor = %d, small alpha\n");
+				}
 				continue;
+			}
 
 			T = T / (1.f - alpha);
 			const float dchannel_dcolor = alpha * T;
@@ -579,28 +589,18 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			glm::mat3 dL_dA_local = glm::mat3(0.0f);
 
 #ifdef Ld
-			
 
-			
 			// weight: macro Wd
 			// update PQRS
 			ndc_m = z2ndc(intersect_c.z);
 			omega = alpha * T;
-			// P_acc -= omega;
-			// Q_acc -= omega * ndc_m;
-			// Q2Q_acc -= omega * ndc_m * ndc_m;
-
-			
-
-			// if (blockIdx.x == 30 && blockIdx.y == 30 && threadIdx.x == 6 && threadIdx.y == 14)
-			// {
-			// 	printf("backward contributor = %d, z= %f, m = %f\n", contributor, intersect_c.z, ndc_m);
-			// }
+			P_acc -= omega;
+			Q_acc -= omega * ndc_m;
+			Q2Q_acc -= omega * ndc_m * ndc_m;
 
 			// dL/domega = dL/dopa
 			const float dLd_domega = Wd * (ndc_m * ndc_m * P_start + Q2Q_start - 2 * ndc_m * Q_start);
-			
-			
+
 			// if ((dLd_domega_new - accum_dLdomega_rec) != dLd_domega_new)
 			// {
 			// 	printf("dopa_old = %f, dLopa_new = %f\n", dLd_domega_new*T, T * (dLd_domega_new - accum_dLdomega_rec));
@@ -609,13 +609,17 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dL_dopa += (T * (dLd_domega - accum_dLdomega_rec));
 			last_dLdomega = dLd_domega;
 
-			thread_Ld += dLd_domega * omega;
+			thread_Ld += Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc));
 
 			// dL/dm
 
 			const float dL_dm = Wd * 2 * omega * (ndc_m * P_start - Q_start);
 
-			
+			if (blockIdx.x == 30 && blockIdx.y == 50 && threadIdx.x == 8 && threadIdx.y == 8)
+			{
+				printf("back contributor= %d, dL_domega = %f, dL_dm = %f, dL_dopa = %f, omega = %f, z = %f, alpha = %f, T = %f, Ld = %f\n", contributor, dLd_domega, dL_dm, (T * (dLd_domega - accum_dLdomega_rec)), omega, intersect_c.z, alpha, T, Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)));
+			}
+
 			dm_dz = 2 * far * near / ((far - near) * intersect_c.z * intersect_c.z);
 			// dm_dz = 2.0f / (far - near);
 
@@ -690,7 +694,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dL_dA_local[2][0] += dL_dz * (dz_du * (-du_dhu3) + dz_dv * (-dv_dhu3));
 			dL_dA_local[2][1] += dL_dz * (dz_du * (-du_dhv3) + dz_dv * (-dv_dhv3));
 			dL_dA_local[2][2] += dL_dz * (dz_du * (du_dhu3 * pix_cam.x + du_dhv3 * pix_cam.y) + dz_dv * (dv_dhu3 * pix_cam.x + dv_dhv3 * pix_cam.y));
-		
 
 #endif
 
@@ -753,6 +756,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	// }
 
 	atomicAdd(Ld_value, thread_Ld);
+
+	if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
+	{
+		printf("backward loss = %f\n", thread_Ld);
+	}
 }
 
 void BACKWARD::preprocess(

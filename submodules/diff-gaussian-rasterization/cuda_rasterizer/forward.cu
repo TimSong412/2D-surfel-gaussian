@@ -417,6 +417,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float omega = 0.0f;
 	float ndc_m = 0.0f;
 
+	float thread_Ld = 0.0f;
+
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
@@ -529,9 +531,15 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			ndc_m = z2ndc(intersect_c.z);
 			omega = alpha * T;
+
+			thread_Ld += omega * (ndc_m* ndc_m * P_acc - 2 * ndc_m * Q_acc + Q2Q_acc);
+
+
 			P_acc += omega;
 			Q_acc += omega * ndc_m;
 			Q2Q_acc += omega * ndc_m * ndc_m;
+
+			
 
 			// if (intersect_c.z < 0 && inside){
 				// 	printf("%f at bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", intersect_c.z, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
@@ -562,7 +570,13 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		ray_P[pix_id] = P_acc;
 		ray_Q[pix_id] = Q_acc;
 		ray_Q2Q[pix_id] = Q2Q_acc;
+
+		if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
+		{
+			printf("forward loss = %f\n", thread_Ld);
+		}
 	}
+	
 }
 
 void FORWARD::render(
