@@ -501,19 +501,19 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			if (intersect_c.z <= near)
 			{
-				if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
-				{
-					printf("backward contributor = %d, close\n");
-				}
+				// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
+				// {
+				// 	printf("backward contributor = %d, close\n", contributor);
+				// }
 				continue;
 			}
 
 			if (alpha < 1.0f / 255.0f)
 			{
-				if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
-				{
-					printf("backward contributor = %d, small alpha\n");
-				}
+				// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
+				// {
+				// 	printf("backward contributor = %d, small alpha\n", contributor);
+				// }
 				continue;
 			}
 
@@ -601,11 +601,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// dL/domega = dL/dopa
 			const float dLd_domega = Wd * (ndc_m * ndc_m * P_start + Q2Q_start - 2 * ndc_m * Q_start);
 
-			// if ((dLd_domega_new - accum_dLdomega_rec) != dLd_domega_new)
-			// {
-			// 	printf("dopa_old = %f, dLopa_new = %f\n", dLd_domega_new*T, T * (dLd_domega_new - accum_dLdomega_rec));
-			// }
-
 			dL_dopa += (T * (dLd_domega - accum_dLdomega_rec));
 			last_dLdomega = dLd_domega;
 
@@ -615,15 +610,16 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			const float dL_dm = Wd * 2 * omega * (ndc_m * P_start - Q_start);
 
-			if (blockIdx.x == 30 && blockIdx.y == 50 && threadIdx.x == 8 && threadIdx.y == 8)
-			{
-				printf("back contributor= %d, dL_domega = %f, dL_dm = %f, dL_dopa = %f, omega = %f, z = %f, alpha = %f, T = %f, Ld = %f\n", contributor, dLd_domega, dL_dm, (T * (dLd_domega - accum_dLdomega_rec)), omega, intersect_c.z, alpha, T, Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)));
-			}
 
 			dm_dz = 2 * far * near / ((far - near) * intersect_c.z * intersect_c.z);
 			// dm_dz = 2.0f / (far - near);
 
 			dL_dz = dL_dm * dm_dz;
+
+			// if (blockIdx.x == 30 && blockIdx.y == 50 && threadIdx.x == 8 && threadIdx.y == 8)
+			// {
+			// 	printf("back contributor= %d, dL_domega = %f, dL_dz = %f, dL_dopa = %f, omega = %f, z = %f, alpha = %f, T = %f, Ld = %f\n", contributor, dLd_domega, dL_dz, (T * (dLd_domega - accum_dLdomega_rec)), omega, intersect_c.z, alpha, T, Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)));
+			// }
 
 			// dL/dp
 			// viewmatrix[2, 0], coloumn major
@@ -699,11 +695,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			// Margin cases
 			// dL_dpx = dL_dG * dG_dpx, dL_dG = con_o.w * dL_dopa
-			const float dL_dpx_margin = G_xc > G_u ? (con_o.w * dL_dopa * 2 * G_hat * d.x * focal_x) : 0.f;
-			const float dL_dpy_margin = G_xc > G_u ? (con_o.w * dL_dopa * 2 * G_hat * d.y * focal_y) : 0.f;
+			const float dL_dpx_margin = (G_xc > G_u) ? (con_o.w * dL_dopa * 2 * G_hat * d.x * focal_x) : 0.f;
+			const float dL_dpy_margin = (G_xc > G_u) ? (con_o.w * dL_dopa * 2 * G_hat * d.y * focal_y) : 0.f;
 
 			// Helpful reusable temporary variables
-			const float dL_dG = G_u >= G_xc ? con_o.w * dL_dopa : 0.f;
+			const float dL_dG = (G_u >= G_xc) ? con_o.w * dL_dopa : 0.f;
 
 			// WARNING: transpose
 			dL_dA_local[0][0] += dL_dG * (dG_du * (-du_dhu1) + dG_dv * (-dv_dhu1));
@@ -757,10 +753,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 	atomicAdd(Ld_value, thread_Ld);
 
-	if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
-	{
-		printf("backward loss = %f\n", thread_Ld);
-	}
+	// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
+	// {
+	// 	printf("backward loss = %f\n", thread_Ld);
+	// }
 }
 
 void BACKWARD::preprocess(
