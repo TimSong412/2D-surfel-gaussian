@@ -182,6 +182,7 @@ CudaRasterizer::ImageState CudaRasterizer::ImageState::fromChunk(char *&chunk, s
 	obtain(chunk, img.ray_Q, N, 128);
 	obtain(chunk, img.ray_P, N, 128);
 	obtain(chunk, img.ray_Q2Q, N, 128);
+	obtain(chunk, img.ray_M, N, 128);
 
 	return img;
 }
@@ -228,6 +229,8 @@ int CudaRasterizer::Rasterizer::forward(
 	float *out_depth,
 	float *out_alpha,
 	float *out_normal,
+	float *out_P,
+	float *out_M,
 	int *radii,
 	bool debug)
 {
@@ -358,8 +361,12 @@ int CudaRasterizer::Rasterizer::forward(
 				   out_normal,
 				   imgState.ray_P,
 				   imgState.ray_Q,
-				   imgState.ray_Q2Q),
+				   imgState.ray_Q2Q,
+				   imgState.ray_M),
 			   debug);
+
+	CHECK_CUDA(cudaMemcpy(out_P, imgState.ray_P, width * height * sizeof(float), cudaMemcpyDeviceToDevice), debug);
+	CHECK_CUDA(cudaMemcpy(out_M, imgState.ray_M, width * height * sizeof(float), cudaMemcpyDeviceToDevice), debug);
 
 	return num_rendered;
 }
@@ -389,6 +396,9 @@ void CudaRasterizer::Rasterizer::backward(
 	const float *dL_dpix,
 	const float *dL_dpix_depth,
 	const float *dL_dalphas,
+	const float* dL_dnormals,
+	const float* dL_dP,
+	const float* dL_dM,
 	float *dL_dmean2D,
 	float *dL_dconic,
 	float *dL_dopacity,
@@ -450,6 +460,9 @@ void CudaRasterizer::Rasterizer::backward(
 				   dL_dpix,
 				   dL_dpix_depth,
 				   dL_dalphas,
+				   dL_dnormals,
+				   dL_dP,
+				   dL_dM,
 				   (float3 *)dL_dmean2D,
 				   (float4 *)dL_dconic,
 				   dL_dopacity,

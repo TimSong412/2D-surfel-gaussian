@@ -75,7 +75,8 @@ namespace FORWARD
 		float *out_normal,
 		float *ray_P,
 		float *ray_Q,
-		float *ray_Q2Q);
+		float *ray_Q2Q,
+		float *ray_M);
 }
 
 #endif
