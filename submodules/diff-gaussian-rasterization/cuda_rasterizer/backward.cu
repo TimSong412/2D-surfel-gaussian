@@ -324,6 +324,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const float *__restrict__ ray_Q,
 		const float *__restrict__ ray_Q2Q,
 		const uint32_t *__restrict__ n_contrib,
+		const uint32_t *__restrict__ depth_contrib, // TODO: use it. forward uses last_contributor, may has no offset
 		const float *__restrict__ dL_dpixels,
 		const float *__restrict__ dL_dpixel_depths,
 		const float *__restrict__ dL_dalphas,
@@ -840,6 +841,7 @@ void BACKWARD::render(
 	const float *ray_Q,
 	const float *ray_Q2Q,
 	const uint32_t *n_contrib,
+	const uint32_t *depth_contrib,
 	const float *dL_dpixels,
 	const float *dL_dpixel_depths,
 	const float *dL_dalphas,
@@ -882,6 +884,7 @@ void BACKWARD::render(
 		ray_Q,
 		ray_Q2Q,
 		n_contrib,
+		depth_contrib,
 		dL_dpixels,
 		dL_dpixel_depths,
 		dL_dalphas,

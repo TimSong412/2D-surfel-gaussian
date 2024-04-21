@@ -69,6 +69,7 @@ namespace FORWARD
 		const float3 *normal,
 		float *out_alpha,
 		uint32_t *n_contrib,
+		uint32_t *depth_contrib,
 		const float *bg_color,
 		float *out_color,
 		float *out_depth,

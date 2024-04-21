@@ -361,6 +361,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const float3 *__restrict__ normal,
 		float *__restrict__ out_alpha,
 		uint32_t *__restrict__ n_contrib,
+		uint32_t *__restrict__ depth_contrib, // TODO: use this
 		const float *__restrict__ bg_color,
 		float *__restrict__ out_color,
 		float *__restrict__ out_depth,
@@ -406,6 +407,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float T = 1.0f;
 	uint32_t contributor = 0;
 	uint32_t last_contributor = 0;
+	uint32_t depth_contributor = 0;
 	float C[CHANNELS] = {0};
 	float weight = 0;
 	float D = 0;
@@ -515,6 +517,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			if (T >= 0.5f)
 			{
 				D = intersect_c.z;
+				depth_contributor = last_contributor; // TODO: may be last_contributor, to match the backward 
 				normal_intersect = collected_normal[j];
 				if (glm::abs(collected_normal[j].x * collected_normal[j].x + collected_normal[j].y * collected_normal[j].y + collected_normal[j].z * collected_normal[j].z - 1) > 0.0001f)
 				{
@@ -598,6 +601,7 @@ void FORWARD::render(
 	const float3 *normal,
 	float *out_alpha,
 	uint32_t *n_contrib,
+	uint32_t *depth_contrib,
 	const float *bg_color,
 	float *out_color,
 	float *out_depth,
@@ -624,6 +628,7 @@ void FORWARD::render(
 		normal,
 		out_alpha,
 		n_contrib,
+		depth_contrib,
 		bg_color,
 		out_color,
 		out_depth,
