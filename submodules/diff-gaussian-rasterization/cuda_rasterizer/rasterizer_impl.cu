@@ -182,7 +182,7 @@ CudaRasterizer::ImageState CudaRasterizer::ImageState::fromChunk(char *&chunk, s
 	obtain(chunk, img.ray_Q, N, 128);
 	obtain(chunk, img.ray_P, N, 128);
 	obtain(chunk, img.ray_Q2Q, N, 128);
-	obtain(chunk, img.ray_M, N, 128);
+	obtain(chunk, img.ray_M, N * 3, 128);
 
 	obtain(chunk, img.depth_contrib, N, 128);
 
@@ -369,7 +369,7 @@ int CudaRasterizer::Rasterizer::forward(
 			   debug);
 
 	CHECK_CUDA(cudaMemcpy(out_P, imgState.ray_P, width * height * sizeof(float), cudaMemcpyDeviceToDevice), debug);
-	CHECK_CUDA(cudaMemcpy(out_M, imgState.ray_M, width * height * sizeof(float), cudaMemcpyDeviceToDevice), debug);
+	CHECK_CUDA(cudaMemcpy(out_M, imgState.ray_M, width * height * sizeof(float)*3, cudaMemcpyDeviceToDevice), debug);
 
 	return num_rendered;
 }

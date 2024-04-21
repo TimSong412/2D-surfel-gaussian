@@ -37,12 +37,14 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 
     depthmap_path = os.path.join(model_path, name, "ours_{}".format(iteration), "depthmap")
     normalmap_path = os.path.join(model_path, name, "ours_{}".format(iteration), "normalmap")
+    depthfile_path = os.path.join(model_path, name, "ours_{}".format(iteration), "depthfile")
 
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
     makedirs(depth_path, exist_ok=True)
     makedirs(depthmap_path, exist_ok=True)
     makedirs(normalmap_path, exist_ok=True)
+    makedirs(depthfile_path, exist_ok=True)
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         # torch.cuda.empty_cache()
@@ -59,8 +61,10 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         gt = view.original_image[0:3, :, :]
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
-        depth[depth<0] = 0
-        depth[depth>10] = 10
+
+        depthfile = depth.cpu().numpy()
+        np.savez_compressed(os.path.join(depthfile_path, '{0:05d}'.format(idx) + ".npz"), depth=depthfile)
+
         normed_depth = (depth - depth.min()) / (depth.max() - depth.min())
         torchvision.utils.save_image(normed_depth, os.path.join(depthmap_path, '{0:05d}'.format(idx) + ".png"))
         if normal is not None:
@@ -89,6 +93,8 @@ def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =Non
     depth: (1,H,W) tensor
     K: (4,4) tensor
     '''
+
+
     
     scale=view.scale
     H,W=rendering.shape[1:]
