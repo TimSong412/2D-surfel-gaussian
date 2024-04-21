@@ -698,6 +698,16 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 #endif
 
+#ifdef Ln
+
+
+
+
+
+
+
+#endif
+
 			// Margin cases
 			// dL_dpx = dL_dG * dG_dpx, dL_dG = con_o.w * dL_dopa
 			const float dL_dpx_margin = (G_xc > G_u) ? (con_o.w * dL_dopa * 2 * G_hat * d.x * focal_x) : 0.f;
