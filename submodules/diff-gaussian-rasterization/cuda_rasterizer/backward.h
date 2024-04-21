@@ -38,6 +38,7 @@ namespace BACKWARD
 		const glm::vec3 *scales,
 		const glm::vec4 *rotations,
 		const float *A,
+		const float3 *normal,
 		const float *ray_P,
 		const float *ray_Q,
 		const float *ray_Q2Q,

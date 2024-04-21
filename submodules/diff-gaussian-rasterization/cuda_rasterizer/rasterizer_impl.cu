@@ -456,6 +456,7 @@ void CudaRasterizer::Rasterizer::backward(
 				   (glm::vec3 *)scales,
 				   (glm::vec4 *)rotations,
 				   geomState.A,
+				   geomState.normal,
 				   imgState.ray_P,
 				   imgState.ray_Q,
 				   imgState.ray_Q2Q,

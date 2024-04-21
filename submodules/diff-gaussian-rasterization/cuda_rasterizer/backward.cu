@@ -320,6 +320,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const glm::vec3 *__restrict__ scale,
 		const glm::vec4 *__restrict__ rotation,
 		const float *__restrict__ A,
+		const float3 *__restrict__ normal,
 		const float *__restrict__ ray_P,
 		const float *__restrict__ ray_Q,
 		const float *__restrict__ ray_Q2Q,
@@ -372,6 +373,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	__shared__ float collected_origin[BLOCK_SIZE * 3];
 	__shared__ glm::vec3 collected_scale[BLOCK_SIZE];
 	__shared__ glm::vec4 collected_rotation[BLOCK_SIZE];
+	__shared__ float3 collected_normal[BLOCK_SIZE];
 
 	// In the forward, we stored the final value for T, the
 	// product of all (1 - alpha) factors.
@@ -454,6 +456,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				collected_origin[block.thread_rank() * 3 + j] = orig_points[coll_id * 3 + j];
 			collected_scale[block.thread_rank()] = scale[coll_id];
 			collected_rotation[block.thread_rank()] = rotation[coll_id];
+			collected_normal[block.thread_rank()] = normal[coll_id];
 		}
 		block.sync();
 
@@ -613,9 +616,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			float dLd_dy = 0;
 			float dLd_dz = 0;
 
-
-#ifdef Ld
-
 			// weight: macro Wd
 			// update PQRS
 			ndc_m = z2ndc(intersect_c.z);
@@ -624,7 +624,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			Q_acc -= omega * ndc_m;
 			Q2Q_acc -= omega * ndc_m * ndc_m;
 
-			// dL/domega = dL/dopa
+			
+
+
+#ifdef Ld
 			const float dLd_domega = Wd * (ndc_m * ndc_m * P_start + Q2Q_start - 2 * ndc_m * Q_start) / (W * H);
 
 			dL_dopa += (T * (dLd_domega - accum_dLdomega_rec));
@@ -714,6 +717,28 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 #endif
 
 #ifdef Ln
+			const float3 nomral_i = collected_normal[j];
+			// dP_domega = 1
+			const float dLn_domega = Wn * (dL_dP[pix_id] + (dL_dM[pix_id * 3 + 0] * nomral_i.x + dL_dM[pix_id * 3 + 1] * nomral_i.y + dL_dM[pix_id * 3 + 2] * nomral_i.z));
+			const dL_dn0 = Wn * dL_dM[pix_id*3+0] * omega;
+			const dL_dn1 = Wn * dL_dM[pix_id*3+1] * omega;
+			const dL_dn2 = Wn * dL_dM[pix_id*3+2] * omega;
+			
+			// dL_dnw = R^T * dL_dn
+			const float dL_dnw0 = viewmatrix[0] * dL_dn0 + viewmatrix[1] * dL_dn1 + viewmatrix[2] * dL_dn2;
+			const float dL_dnw1 = viewmatrix[4] * dL_dn0 + viewmatrix[5] * dL_dn1 + viewmatrix[6] * dL_dn2;
+			const float dL_dnw2 = viewmatrix[8] * dL_dn0 + viewmatrix[9] * dL_dn1 + viewmatrix[10] * dL_dn2;
+			
+			const float dLn_dx = 2.f * (dL_dnw0 * z - dL_dnw1 * r - 2.f * x * dL_dnw2);
+			const float dLn_dy = 2.f * (dL_dnw0 * r + dL_dnw1 * z - 2.f * y * dL_dnw2);
+			const float dLn_dz = 2.f * (dL_dnw0 * x + dL_dnw1 * y);
+			const float dLn_dr = 2.f * (dL_dnw0 * y - dL_dnw1 * x);
+
+			atomicAdd(&dL_drot[global_id].x, dLn_dr);
+			atomicAdd(&dL_drot[global_id].y, dLn_dx);
+			atomicAdd(&dL_drot[global_id].z, dLn_dy);
+			atomicAdd(&dL_drot[global_id].w, dLn_dz);
+			
 
 
 			if (contributor == depth_contrib[pix_id]) {
@@ -914,6 +939,7 @@ void BACKWARD::render(
 	const glm::vec3 *scale,
 	const glm::vec4 *rotation,
 	const float *A,
+	const float3 *normal,
 	const float *ray_P,
 	const float *ray_Q,
 	const float *ray_Q2Q,
@@ -957,6 +983,7 @@ void BACKWARD::render(
 		scale,
 		rotation,
 		A,
+		normal,
 		ray_P,
 		ray_Q,
 		ray_Q2Q,

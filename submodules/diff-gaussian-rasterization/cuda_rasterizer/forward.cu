@@ -139,7 +139,7 @@ __device__ void computeSTuv(const glm::vec3 scale, const float mod, const glm::v
 	STuv[4] = mod * scale.y * R[1][1];
 	STuv[5] = mod * scale.y * R[2][1];
 
-	// Normal
+	// Normal in world space
 	normal = {R[0][2], R[1][2], R[2][2]};
 }
 
@@ -169,7 +169,7 @@ __device__ void computeA(float *STuv, float3 p_k, const float *view_matrix, floa
 	A[7] = r3s2;
 	A[8] = r3p_t3;
 
-	// Normal
+	// Normal in camera space
 	float r1n = view_matrix[0] * normal.x + view_matrix[4] * normal.y + view_matrix[8] * normal.z;
 	float r2n = view_matrix[1] * normal.x + view_matrix[5] * normal.y + view_matrix[9] * normal.z;
 	float r3n = view_matrix[2] * normal.x + view_matrix[6] * normal.y + view_matrix[10] * normal.z;
