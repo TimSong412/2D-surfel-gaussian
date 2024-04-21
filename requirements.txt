@@ -7,3 +7,6 @@ open3d
 opencv-python
 tensorboard
 protobuf==4.25.3
+torchmetrics
+wis3d
+trimesh
