@@ -391,7 +391,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float dL_dpixel_depth;
 	float accum_alpha_rec = 0;
 	float dL_dalpha = 0.0f;
-	float accum_dLdomega_rec = 0;
+	float accum_dLd_domega_rec = 0;
+
+	float accum_dLn_domega_rec = 0;
 
 	float P_acc = 0.0f;
 	float Q_acc = 0.0f;
@@ -417,7 +419,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float last_alpha = 0;
 	float last_color[C] = {0};
 	float last_depth = 0;
-	float last_dLdomega = 0;
+	float last_dLd_domega = 0;
+
+	float last_dLn_domega = 0;
+
 	float omega = 0;
 	float ndc_m = 0;
 
@@ -560,7 +565,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dL_dopa += (1 - accum_alpha_rec) * dL_dalpha; //- (alpha - accum_alpha_rec) * dL_dalpha;
 
 			// Propagate gradients from dLdomega to opacity
-			accum_dLdomega_rec = last_alpha * last_dLdomega + (1.f - last_alpha) * accum_dLdomega_rec;
+			accum_dLd_domega_rec = last_alpha * last_dLd_domega + (1.f - last_alpha) * accum_dLd_domega_rec;
+
+			accum_dLn_domega_rec = last_alpha * last_dLn_domega + (1.f - last_alpha) * accum_dLn_domega_rec;
 
 			dL_dopa *= T;
 			// Update last alpha (to be used in the next iteration)
@@ -630,8 +637,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 #ifdef Ld
 			const float dLd_domega = Wd * (ndc_m * ndc_m * P_start + Q2Q_start - 2 * ndc_m * Q_start) / (W * H);
 
-			dL_dopa += (T * (dLd_domega - accum_dLdomega_rec));
-			last_dLdomega = dLd_domega;
+			dL_dopa += (T * (dLd_domega - accum_dLd_domega_rec));
+			last_dLd_domega = dLd_domega;
 
 			thread_Ld += Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)) / (W * H);
 
@@ -648,7 +655,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			// if (blockIdx.x == 30 && blockIdx.y == 50 && threadIdx.x == 8 && threadIdx.y == 8)
 			// {
-			// 	printf("back contributor= %d, dL_domega = %f, dL_dz = %f, dL_dopa = %f, omega = %f, z = %f, alpha = %f, T = %f, Ld = %f\n", contributor, dLd_domega, dL_dz, (T * (dLd_domega - accum_dLdomega_rec)), omega, intersect_c.z, alpha, T, Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)));
+			// 	printf("back contributor= %d, dL_domega = %f, dL_dz = %f, dL_dopa = %f, omega = %f, z = %f, alpha = %f, T = %f, Ld = %f\n", contributor, dLd_domega, dL_dz, (T * (dLd_domega - accum_dLd_domega_rec)), omega, intersect_c.z, alpha, T, Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)));
 			// }
 
 			// dL/dp
@@ -720,9 +727,13 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float3 nomral_i = collected_normal[j];
 			// dP_domega = 1
 			const float dLn_domega = (dL_dP[pix_id] + (dL_dM[pix_id * 3 + 0] * nomral_i.x + dL_dM[pix_id * 3 + 1] * nomral_i.y + dL_dM[pix_id * 3 + 2] * nomral_i.z));
-			const dL_dn0 = dL_dM[pix_id*3+0] * omega;
-			const dL_dn1 = dL_dM[pix_id*3+1] * omega;
-			const dL_dn2 = dL_dM[pix_id*3+2] * omega;
+
+			dL_dopa += (T * (dLn_domega - accum_dLn_domega_rec));
+			last_dLn_domega = dLn_domega;
+
+			const float dL_dn0 = dL_dM[pix_id*3+0] * omega;
+			const float dL_dn1 = dL_dM[pix_id*3+1] * omega;
+			const float dL_dn2 = dL_dM[pix_id*3+2] * omega;
 			
 			// dL_dnw = R^T * dL_dn
 			const float dL_dnw0 = viewmatrix[0] * dL_dn0 + viewmatrix[1] * dL_dn1 + viewmatrix[2] * dL_dn2;

@@ -544,7 +544,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			P_acc += omega;
 			Q_acc += omega * ndc_m;
 			Q2Q_acc += omega * ndc_m * ndc_m;
-			M_acc += omega * collected_normal[j];
+			M_acc.x += omega * collected_normal[j].x;
+			M_acc.y += omega * collected_normal[j].y;
+			M_acc.z += omega * collected_normal[j].z;
 			
 
 			// if (intersect_c.z < 0 && inside){
