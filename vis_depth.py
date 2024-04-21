@@ -24,10 +24,11 @@ from arguments import ModelParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel
 from utils.graphics_utils import fov2focal
 from wis3d import Wis3D
+from torchmetrics.functional.image import image_gradients
 
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background):
-    v3d = Wis3D("dbg", model_path[-5:], "xyz")
+    v3d = Wis3D("dbg", model_path.strip("output/")[:10], "xyz")
     print("wis3d dir: ", model_path[-5:])
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
@@ -36,12 +37,14 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 
     depthmap_path = os.path.join(model_path, name, "ours_{}".format(iteration), "depthmap")
     normalmap_path = os.path.join(model_path, name, "ours_{}".format(iteration), "normalmap")
+    depthfile_path = os.path.join(model_path, name, "ours_{}".format(iteration), "depthfile")
 
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
     makedirs(depth_path, exist_ok=True)
     makedirs(depthmap_path, exist_ok=True)
     makedirs(normalmap_path, exist_ok=True)
+    makedirs(depthfile_path, exist_ok=True)
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         # torch.cuda.empty_cache()
@@ -58,13 +61,16 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         gt = view.original_image[0:3, :, :]
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
-        depth[depth<0] = 0
-        depth[depth>10] = 10
+
+        depthfile = depth.cpu().numpy()
+        np.savez_compressed(os.path.join(depthfile_path, '{0:05d}'.format(idx) + ".npz"), depth=depthfile)
+
         normed_depth = (depth - depth.min()) / (depth.max() - depth.min())
         torchvision.utils.save_image(normed_depth, os.path.join(depthmap_path, '{0:05d}'.format(idx) + ".png"))
         if normal is not None:
             normal[:, depth[0]<=0] = -1
             torchvision.utils.save_image((normal+1)/2, os.path.join(normalmap_path, '{0:05d}'.format(idx) + ".png"))
+        break
     
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool):
     with torch.no_grad():
@@ -87,6 +93,8 @@ def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =Non
     depth: (1,H,W) tensor
     K: (4,4) tensor
     '''
+
+
     
     scale=view.scale
     H,W=rendering.shape[1:]
@@ -110,6 +118,17 @@ def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =Non
     Y=Y[valid_mask]
     Z=Z[valid_mask]
 
+    depth_D = depth.clone().detach().unsqueeze(0)
+    dZx, dZy = image_gradients(depth_D)
+    dZx = dZx.squeeze(0).squeeze(0)
+    dZy = dZy.squeeze(0).squeeze(0)
+    grad_x = torch.stack([depth_D.squeeze()/fx, torch.zeros_like(dZx), dZx], dim=0)
+    grad_y = torch.stack([torch.zeros_like(dZy), depth_D.squeeze()/fy, dZy], dim=0)
+    # grad_x = grad_x / torch.norm(grad_x, dim=0, keepdim=True)
+    # grad_y = grad_y / torch.norm(grad_y, dim=0, keepdim=True)
+    normal_D = torch.cross(grad_x, grad_y, dim=0)
+    normal_D = normal_D / torch.norm(normal_D, dim=0, keepdim=True)
+
     pcd=o3d.geometry.PointCloud()
     pcd.points=o3d.utility.Vector3dVector(np.stack((X, Y, Z), axis=-1).reshape(-1, 3))
     colors = rendering.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()
@@ -125,7 +144,9 @@ def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =Non
         vis.set_scene_id(idx)
         normal = normal.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
         vis.add_point_cloud(np.stack((X, Y, Z), axis=-1).reshape(-1, 3), colors= colors, name="pointcloud")
+        normal_D = normal_D.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
         vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::100], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + normal.reshape(-1, 3))[::100], name="normals")
+        vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::100], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + normal_D.reshape(-1, 3))[::100], name="normals_D")
         
 
 
