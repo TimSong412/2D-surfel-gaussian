@@ -422,6 +422,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 	float thread_Ld = 0.0f;
 
+	float3 M_acc = {0.0f, 0.0f, 0.0f};
+
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
@@ -542,7 +544,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			P_acc += omega;
 			Q_acc += omega * ndc_m;
 			Q2Q_acc += omega * ndc_m * ndc_m;
-
+			M_acc += omega * collected_normal[j];
 			
 
 			// if (intersect_c.z < 0 && inside){
@@ -575,6 +577,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		ray_Q[pix_id] = Q_acc;
 		ray_Q2Q[pix_id] = Q2Q_acc;
 		depth_contrib[pix_id] = depth_contributor;
+		ray_M[3 * pix_id + 0] = M_acc.x;
+		ray_M[3 * pix_id + 1] = M_acc.y;
+		ray_M[3 * pix_id + 2] = M_acc.z;
 
 		// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
 		// {
