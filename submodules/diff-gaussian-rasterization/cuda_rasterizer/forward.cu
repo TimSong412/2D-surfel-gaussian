@@ -574,6 +574,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		ray_P[pix_id] = P_acc;
 		ray_Q[pix_id] = Q_acc;
 		ray_Q2Q[pix_id] = Q2Q_acc;
+		depth_contrib[pix_id] = depth_contributor;
 
 		// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
 		// {
