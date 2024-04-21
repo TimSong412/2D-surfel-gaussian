@@ -71,6 +71,6 @@ def norm_loss(P, M, depth):
     grad_y = torch.stack([torch.zeros_like(dy), dy, torch.zeros_like(dy)], dim=0)
     normal = -torch.cross(grad_x, grad_y, dim=0)
     normal = normal / torch.norm(normal, dim=0, keepdim=True)
-
-    return (P + M @ normal).mean()
+    
+    return (P + (M * normal).sum(dim=0)).mean()
 
