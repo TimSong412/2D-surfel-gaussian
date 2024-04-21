@@ -42,6 +42,7 @@ namespace BACKWARD
 		const float *ray_Q,
 		const float *ray_Q2Q,
 		const uint32_t *n_contrib,
+		const uint32_t *depth_contrib,
 		const float *dL_dpixels,
 		const float *dL_dpixel_depths,
 		const float *dL_dalphas,

@@ -184,6 +184,8 @@ CudaRasterizer::ImageState CudaRasterizer::ImageState::fromChunk(char *&chunk, s
 	obtain(chunk, img.ray_Q2Q, N, 128);
 	obtain(chunk, img.ray_M, N * 3, 128);
 
+	obtain(chunk, img.depth_contrib, N, 128);
+
 	return img;
 }
 
@@ -355,6 +357,7 @@ int CudaRasterizer::Rasterizer::forward(
 				   geomState.normal,
 				   out_alpha,
 				   imgState.n_contrib,
+				   imgState.depth_contrib,
 				   background,
 				   out_color,
 				   out_depth,
@@ -457,6 +460,7 @@ void CudaRasterizer::Rasterizer::backward(
 				   imgState.ray_Q,
 				   imgState.ray_Q2Q,
 				   imgState.n_contrib,
+				   imgState.depth_contrib,
 				   dL_dpix,
 				   dL_dpix_depth,
 				   dL_dalphas,

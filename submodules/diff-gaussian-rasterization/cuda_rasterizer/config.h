@@ -21,4 +21,6 @@
 #define far 1000.0f
 #define near 0.2f
 
+#define Ln
+
 #endif
