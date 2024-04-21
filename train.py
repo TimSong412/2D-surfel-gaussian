@@ -147,14 +147,17 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+        norm_loss = norm_loss(ray_P, ray_M, depth)
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.05 * norm_loss
         loss.backward()
+
+        print(depth.grad, ray_P.grad, ray_M.grad)
         # gradient clipping
         gradnorm = torch.nn.utils.clip_grad_norm_(gaussians.get_paramlist(), 2e-4)
 
         # if iteration % 50 == 1:
         #     vis_value(gaussians.get_opacity, gaussians._xyz, iteration, "./value_GT")
-        # vis_grad(gaussians._opacity.grad, gaussians._xyz, iteration, ".")
+        #     vis_grad(gaussians._opacity.grad, gaussians._xyz, iteration, ".")
         
         
         iter_end.record()
