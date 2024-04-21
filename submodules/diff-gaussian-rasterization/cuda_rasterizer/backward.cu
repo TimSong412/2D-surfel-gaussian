@@ -719,10 +719,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 #ifdef Ln
 			const float3 nomral_i = collected_normal[j];
 			// dP_domega = 1
-			const float dLn_domega = Wn * (dL_dP[pix_id] + (dL_dM[pix_id * 3 + 0] * nomral_i.x + dL_dM[pix_id * 3 + 1] * nomral_i.y + dL_dM[pix_id * 3 + 2] * nomral_i.z));
-			const dL_dn0 = Wn * dL_dM[pix_id*3+0] * omega;
-			const dL_dn1 = Wn * dL_dM[pix_id*3+1] * omega;
-			const dL_dn2 = Wn * dL_dM[pix_id*3+2] * omega;
+			const float dLn_domega = (dL_dP[pix_id] + (dL_dM[pix_id * 3 + 0] * nomral_i.x + dL_dM[pix_id * 3 + 1] * nomral_i.y + dL_dM[pix_id * 3 + 2] * nomral_i.z));
+			const dL_dn0 = dL_dM[pix_id*3+0] * omega;
+			const dL_dn1 = dL_dM[pix_id*3+1] * omega;
+			const dL_dn2 = dL_dM[pix_id*3+2] * omega;
 			
 			// dL_dnw = R^T * dL_dn
 			const float dL_dnw0 = viewmatrix[0] * dL_dn0 + viewmatrix[1] * dL_dn1 + viewmatrix[2] * dL_dn2;
