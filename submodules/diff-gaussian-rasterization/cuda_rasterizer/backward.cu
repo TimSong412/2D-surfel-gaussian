@@ -618,10 +618,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			float x = q.y;
 			float y = q.z;
 			float z = q.w;
-		 	float dLd_dr = 0;
-			float dLd_dx = 0;
-			float dLd_dy = 0;
-			float dLd_dz = 0;
 
 			// weight: macro Wd
 			// update PQRS
@@ -689,10 +685,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dL_dtv2 = dL_dz * viewmatrix[10] * collected_scale[j].y * v;
 
 			// compute gradient through quaternion
-			dLd_dr = 2.0f * (z * (dL_dtu1 - dL_dtv0) - y * dL_dtu2 + x * dL_dtv2);
-			dLd_dx = 2.0f * (y * (dL_dtu1 + dL_dtv0) + z * dL_dtu2 + r * dL_dtv2 - 2.0f * x * dL_dtv1);
-			dLd_dy = 2.0f * (x * (dL_dtu1 + dL_dtv0) - r * dL_dtu2 + z * dL_dtv2 - 2.0f * y * dL_dtu0);
-			dLd_dz = 2.0f * (r * (dL_dtu1 - dL_dtv0) + x * dL_dtu2 + y * dL_dtv2 - 2.0f * z * (dL_dtu0 + dL_dtv1));
+			float dLd_dr = 2.0f * (z * (dL_dtu1 - dL_dtv0) - y * dL_dtu2 + x * dL_dtv2);
+			float dLd_dx = 2.0f * (y * (dL_dtu1 + dL_dtv0) + z * dL_dtu2 + r * dL_dtv2 - 2.0f * x * dL_dtv1);
+			float dLd_dy = 2.0f * (x * (dL_dtu1 + dL_dtv0) - r * dL_dtu2 + z * dL_dtv2 - 2.0f * y * dL_dtu0);
+			float dLd_dz = 2.0f * (r * (dL_dtu1 - dL_dtv0) + x * dL_dtu2 + y * dL_dtv2 - 2.0f * z * (dL_dtu0 + dL_dtv1));
 
 			atomicAdd(&dL_drot[global_id].x, dLd_dr);
 			atomicAdd(&dL_drot[global_id].y, dLd_dx);
@@ -740,10 +736,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float dL_dnw1 = viewmatrix[4] * dL_dn0 + viewmatrix[5] * dL_dn1 + viewmatrix[6] * dL_dn2;
 			const float dL_dnw2 = viewmatrix[8] * dL_dn0 + viewmatrix[9] * dL_dn1 + viewmatrix[10] * dL_dn2;
 			
-			const float dLn_dx = 2.f * (dL_dnw0 * z - dL_dnw1 * r - 2.f * x * dL_dnw2);
-			const float dLn_dy = 2.f * (dL_dnw0 * r + dL_dnw1 * z - 2.f * y * dL_dnw2);
-			const float dLn_dz = 2.f * (dL_dnw0 * x + dL_dnw1 * y);
-			const float dLn_dr = 2.f * (dL_dnw0 * y - dL_dnw1 * x);
+			float dLn_dx = 2.f * (dL_dnw0 * z - dL_dnw1 * r - 2.f * x * dL_dnw2);
+			float dLn_dy = 2.f * (dL_dnw0 * r + dL_dnw1 * z - 2.f * y * dL_dnw2);
+			float dLn_dz = 2.f * (dL_dnw0 * x + dL_dnw1 * y);
+			float dLn_dr = 2.f * (dL_dnw0 * y - dL_dnw1 * x);
 
 			atomicAdd(&dL_drot[global_id].x, dLn_dr);
 			atomicAdd(&dL_drot[global_id].y, dLn_dx);
@@ -755,9 +751,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			if (contributor == depth_contrib[pix_id]) {
 				// dL/dp
 				// viewmatrix[2, 0], coloumn major
-				const float dLn_dp0 = dL_ddepths[pix_id] * viewmatrix[8];
-				const float dLn_dp1 = dL_ddepths[pix_id] * viewmatrix[9];
-				const float dLn_dp2 = dL_ddepths[pix_id] * viewmatrix[10];
+				const float dLn_dp0 = dL_dpixel_depths[pix_id] * viewmatrix[8];
+				const float dLn_dp1 = dL_dpixel_depths[pix_id] * viewmatrix[9];
+				const float dLn_dp2 = dL_dpixel_depths[pix_id] * viewmatrix[10];
 
 				atomicAdd(&dL_dmeans3D[global_id].x, dLn_dp0);
 				atomicAdd(&dL_dmeans3D[global_id].y, dLn_dp1);
@@ -771,39 +767,39 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 					dz_dsv += viewmatrix[8 + k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
 				}
 
-				atomicAdd(&dL_dscale[global_id].x, dL_ddepths[pix_id] * dz_dsu);
-				atomicAdd(&dL_dscale[global_id].y, dL_ddepths[pix_id] * dz_dsv);
+				atomicAdd(&dL_dscale[global_id].x, dL_dpixel_depths[pix_id] * dz_dsu);
+				atomicAdd(&dL_dscale[global_id].y, dL_dpixel_depths[pix_id] * dz_dsv);
 
-				dL_dtu0 = dL_ddepths[pix_id] * viewmatrix[8] * collected_scale[j].x * u;
-				dL_dtu1 = dL_ddepths[pix_id] * viewmatrix[9] * collected_scale[j].x * u;
-				dL_dtu2 = dL_ddepths[pix_id] * viewmatrix[10] * collected_scale[j].x * u;
-				dL_dtv0 = dL_ddepths[pix_id] * viewmatrix[8] * collected_scale[j].y * v;
-				dL_dtv1 = dL_ddepths[pix_id] * viewmatrix[9] * collected_scale[j].y * v;
-				dL_dtv2 = dL_ddepths[pix_id] * viewmatrix[10] * collected_scale[j].y * v;
+				dL_dtu0 = dL_dpixel_depths[pix_id] * viewmatrix[8] * collected_scale[j].x * u;
+				dL_dtu1 = dL_dpixel_depths[pix_id] * viewmatrix[9] * collected_scale[j].x * u;
+				dL_dtu2 = dL_dpixel_depths[pix_id] * viewmatrix[10] * collected_scale[j].x * u;
+				dL_dtv0 = dL_dpixel_depths[pix_id] * viewmatrix[8] * collected_scale[j].y * v;
+				dL_dtv1 = dL_dpixel_depths[pix_id] * viewmatrix[9] * collected_scale[j].y * v;
+				dL_dtv2 = dL_dpixel_depths[pix_id] * viewmatrix[10] * collected_scale[j].y * v;
 
 				// compute gradient through quaternion
-				dLd_dr = 2.0f * (z * (dL_dtu1 - dL_dtv0) - y * dL_dtu2 + x * dL_dtv2);
-				dLd_dx = 2.0f * (y * (dL_dtu1 + dL_dtv0) + z * dL_dtu2 + r * dL_dtv2 - 2.0f * x * dL_dtv1);
-				dLd_dy = 2.0f * (x * (dL_dtu1 + dL_dtv0) - r * dL_dtu2 + z * dL_dtv2 - 2.0f * y * dL_dtu0);
-				dLd_dz = 2.0f * (r * (dL_dtu1 - dL_dtv0) + x * dL_dtu2 + y * dL_dtv2 - 2.0f * z * (dL_dtu0 + dL_dtv1));
+				dLn_dr = 2.0f * (z * (dL_dtu1 - dL_dtv0) - y * dL_dtu2 + x * dL_dtv2);
+				dLn_dx = 2.0f * (y * (dL_dtu1 + dL_dtv0) + z * dL_dtu2 + r * dL_dtv2 - 2.0f * x * dL_dtv1);
+				dLn_dy = 2.0f * (x * (dL_dtu1 + dL_dtv0) - r * dL_dtu2 + z * dL_dtv2 - 2.0f * y * dL_dtu0);
+				dLn_dz = 2.0f * (r * (dL_dtu1 - dL_dtv0) + x * dL_dtu2 + y * dL_dtv2 - 2.0f * z * (dL_dtu0 + dL_dtv1));
 
-				atomicAdd(&dL_drot[global_id].x, dLd_dr);
-				atomicAdd(&dL_drot[global_id].y, dLd_dx);
-				atomicAdd(&dL_drot[global_id].z, dLd_dy);
-				atomicAdd(&dL_drot[global_id].w, dLd_dz);
+				atomicAdd(&dL_drot[global_id].x, dLn_dr);
+				atomicAdd(&dL_drot[global_id].y, dLn_dx);
+				atomicAdd(&dL_drot[global_id].z, dLn_dy);
+				atomicAdd(&dL_drot[global_id].w, dLn_dz);
 
 				dz_du = collected_STuv[j * 6 + 0] * viewmatrix[8] + collected_STuv[j * 6 + 1] * viewmatrix[9] + collected_STuv[j * 6 + 2] * viewmatrix[10];
 				dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[8] + collected_STuv[j * 6 + 4] * viewmatrix[9] + collected_STuv[j * 6 + 5] * viewmatrix[10];
 
-				dL_dA_local[0][0] += dL_ddepths[pix_id] * (dz_du * (-du_dhu1) + dz_dv * (-dv_dhu1));
-				dL_dA_local[0][1] += dL_ddepths[pix_id] * (dz_du * (-du_dhv1) + dz_dv * (-dv_dhv1));
-				dL_dA_local[0][2] += dL_ddepths[pix_id] * (dz_du * (du_dhu1 * pix_cam.x + du_dhv1 * pix_cam.y) + dz_dv * (dv_dhu1 * pix_cam.x + dv_dhv1 * pix_cam.y));
-				dL_dA_local[1][0] += dL_ddepths[pix_id] * (dz_du * (-du_dhu2) + dz_dv * (-dv_dhu2));
-				dL_dA_local[1][1] += dL_ddepths[pix_id] * (dz_du * (-du_dhv2) + dz_dv * (-dv_dhv2));
-				dL_dA_local[1][2] += dL_ddepths[pix_id] * (dz_du * (du_dhu2 * pix_cam.x + du_dhv2 * pix_cam.y) + dz_dv * (dv_dhu2 * pix_cam.x + dv_dhv2 * pix_cam.y));
-				dL_dA_local[2][0] += dL_ddepths[pix_id] * (dz_du * (-du_dhu3) + dz_dv * (-dv_dhu3));
-				dL_dA_local[2][1] += dL_ddepths[pix_id] * (dz_du * (-du_dhv3) + dz_dv * (-dv_dhv3));
-				dL_dA_local[2][2] += dL_ddepths[pix_id] * (dz_du * (du_dhu3 * pix_cam.x + du_dhv3 * pix_cam.y) + dz_dv * (dv_dhu3 * pix_cam.x + dv_dhv3 * pix_cam.y));
+				dL_dA_local[0][0] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhu1) + dz_dv * (-dv_dhu1));
+				dL_dA_local[0][1] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhv1) + dz_dv * (-dv_dhv1));
+				dL_dA_local[0][2] += dL_dpixel_depths[pix_id] * (dz_du * (du_dhu1 * pix_cam.x + du_dhv1 * pix_cam.y) + dz_dv * (dv_dhu1 * pix_cam.x + dv_dhv1 * pix_cam.y));
+				dL_dA_local[1][0] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhu2) + dz_dv * (-dv_dhu2));
+				dL_dA_local[1][1] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhv2) + dz_dv * (-dv_dhv2));
+				dL_dA_local[1][2] += dL_dpixel_depths[pix_id] * (dz_du * (du_dhu2 * pix_cam.x + du_dhv2 * pix_cam.y) + dz_dv * (dv_dhu2 * pix_cam.x + dv_dhv2 * pix_cam.y));
+				dL_dA_local[2][0] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhu3) + dz_dv * (-dv_dhu3));
+				dL_dA_local[2][1] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhv3) + dz_dv * (-dv_dhv3));
+				dL_dA_local[2][2] += dL_dpixel_depths[pix_id] * (dz_du * (du_dhu3 * pix_cam.x + du_dhv3 * pix_cam.y) + dz_dv * (dv_dhu3 * pix_cam.x + dv_dhv3 * pix_cam.y));
 
 			}
 

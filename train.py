@@ -151,7 +151,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.05 * Ln
         loss.backward()
 
-        print(depth.grad, ray_P.grad, ray_M.grad)
         # gradient clipping
         gradnorm = torch.nn.utils.clip_grad_norm_(gaussians.get_paramlist(), 2e-4)
 
