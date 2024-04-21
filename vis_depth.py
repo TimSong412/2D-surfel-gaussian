@@ -24,11 +24,12 @@ from arguments import ModelParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel
 from utils.graphics_utils import fov2focal
 from wis3d import Wis3D
+from torchmetrics.functional.image import image_gradients
 
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background):
-    v3d = Wis3D("dbg", model_path[-5:], "xyz")
-    print("wis3d dir: ", model_path[-5:])
+    v3d = Wis3D("dbg", model_path.strip("output/")[:10], "xyz")
+    print("wis3d dir: ", model_path.strip("output/")[:10])
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
 
@@ -65,6 +66,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         if normal is not None:
             normal[:, depth[0]<=0] = -1
             torchvision.utils.save_image((normal+1)/2, os.path.join(normalmap_path, '{0:05d}'.format(idx) + ".png"))
+        break
     
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool):
     with torch.no_grad():
@@ -110,6 +112,16 @@ def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =Non
     Y=Y[valid_mask]
     Z=Z[valid_mask]
 
+    depth_D = depth.clone().detach().unsqueeze(0)
+    dZx, dZy = image_gradients(depth_D)
+    dZx = dZx.squeeze()
+    dZy = dZy.squeeze()
+    grad_x = torch.stack([depth_D.squeeze()/fx, torch.zeros_like(depth_D.squeeze()), dZx], dim=-1)
+    grad_y = torch.stack([torch.zeros_like(depth_D.squeeze()), depth_D.squeeze()/fy, dZy], dim=-1)
+    normal_D = torch.cross(grad_x, grad_y, dim=-1)
+    normal_D = normal_D / torch.norm(normal_D, dim=-1, keepdim=True)
+
+
     pcd=o3d.geometry.PointCloud()
     pcd.points=o3d.utility.Vector3dVector(np.stack((X, Y, Z), axis=-1).reshape(-1, 3))
     colors = rendering.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()
@@ -125,8 +137,9 @@ def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =Non
         vis.set_scene_id(idx)
         normal = normal.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
         vis.add_point_cloud(np.stack((X, Y, Z), axis=-1).reshape(-1, 3), colors= colors, name="pointcloud")
-        vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::100], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + normal.reshape(-1, 3))[::100], name="normals")
-        
+        vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::150], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + normal.reshape(-1, 3))[::150], name="normals")
+        normal_D = normal_D.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
+        vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::150], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + normal_D.reshape(-1, 3))[::150], name="normals_D")
 
 
 
