@@ -143,11 +143,15 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         render_pkg = render(viewpoint_cam, gaussians, pipe, bg, Ld_value=Ld_value)
         image, viewspace_point_tensor, visibility_filter, radii, depth, ray_P, ray_M = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["depth"], render_pkg["ray_P"], render_pkg["ray_M"]
-
+        ray_P.retain_grad()
+        ray_M.retain_grad()
+        depth.retain_grad()
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
+        fx = fov2focal(viewpoint_cam.FoVx, viewpoint_cam.image_width)
+        fy = fov2focal(viewpoint_cam.FoVy, viewpoint_cam.image_height)
         Ll1 = l1_loss(image, gt_image)
-        Ln = norm_loss(ray_P, ray_M, depth)
+        Ln = norm_loss(ray_P, ray_M, depth, fx, fy)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.05 * Ln
         loss.backward()
 
