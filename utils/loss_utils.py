@@ -63,7 +63,17 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True):
     else:
         return ssim_map.mean(1).mean(1).mean(1)
     
-def norm_loss(P, M, depth, fx, fy):
+def norm_loss(P, M, depth, fx, fy, W, H):
+    cx=W/2.0
+    cy=H/2.0
+
+    x=torch.arange(W).reshape(1, -1).repeat(H, 1)
+    y=torch.arange(H).reshape(-1, 1).repeat(1, W)
+    x=(x-cx)/fx
+    y=(y-cy)/fy
+    view_ray = torch.stack([x, y, torch.ones_like(x)]).to(depth.device)
+    view_ray = view_ray / torch.norm(view_ray, dim=0, keepdim=True)
+
     dZx, dZy = image_gradients(depth.unsqueeze(0))
     dZx = dZx.squeeze()
     dZy = dZy.squeeze()
@@ -71,6 +81,8 @@ def norm_loss(P, M, depth, fx, fy):
     grad_y = torch.stack([torch.zeros_like(depth.squeeze()), depth.squeeze()/fy, dZy])
     normal = torch.cross(grad_x, grad_y, dim=0)
     normal = normal / torch.norm(normal, dim=0, keepdim=True)
+    angle = torch.sum(normal * view_ray, dim=0)
+    normal[:, angle>0] = -normal[:, angle>0]
     
     return (P + (M * normal).sum(dim=0)).mean()
 

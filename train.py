@@ -151,7 +151,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         fx = fov2focal(viewpoint_cam.FoVx, viewpoint_cam.image_width)
         fy = fov2focal(viewpoint_cam.FoVy, viewpoint_cam.image_height)
         Ll1 = l1_loss(image, gt_image)
-        Ln = norm_loss(ray_P, ray_M, depth, fx, fy)
+        Ln = norm_loss(ray_P, ray_M, depth, fx, fy, viewpoint_cam.image_width, viewpoint_cam.image_height)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.05 * Ln
         loss.backward()
 
