@@ -109,8 +109,8 @@ def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =Non
     cx=W/2
     cy=H/2
 
-    Ln = norm_loss(ray_P, ray_M, depth, fx, fy, W, H)
-    # print("Ln: ", Ln)
+    Ln, normal_L = norm_loss(ray_P, ray_M, depth, fx, fy, W, H)
+    print("Ln: ", Ln)
     
 
     x=torch.arange(W).reshape(1, -1).repeat(H, 1)
@@ -173,13 +173,14 @@ def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =Non
     normal_RGB = (1-normal_P) / 2.0
     torchvision.utils.save_image(normal_RGB, os.path.join(normal_path, f"normal_P{idx:05d}.png"))
 
+    print("norm err: ", torch.norm(normal_P - normal_L))
     
     
 
     # normal_RGB = (1-normal_D) / 2.0
     # torchvision.utils.save_image(normal_RGB, os.path.join(normal_path, f"N{idx:05d}.png"))
 
-
+    Z = torch.clamp(Z, 1, 15)
     pcd=o3d.geometry.PointCloud()
     pcd.points=o3d.utility.Vector3dVector(np.stack((X, Y, Z), axis=-1).reshape(-1, 3))
     colors = rendering.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()
