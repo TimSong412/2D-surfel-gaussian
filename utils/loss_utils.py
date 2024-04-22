@@ -14,6 +14,8 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from math import exp
 from torchmetrics.functional.image import image_gradients
+from .graphics_utils import fov2focal
+import numpy as np
 
 def l1_loss(network_output, gt):
     return torch.abs((network_output - gt)).mean()

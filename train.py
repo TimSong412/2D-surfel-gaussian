@@ -149,8 +149,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         depth.retain_grad()
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
-        fx = fov2focal(viewpoint_cam.FoVx, viewpoint_cam.image_width)
-        fy = fov2focal(viewpoint_cam.FoVy, viewpoint_cam.image_height)
         Ll1 = l1_loss(image, gt_image)
         # depth = torch.clamp(depth, 0.1)
         Ln, depth_norm = norm_loss(ray_P, ray_M, depth, fx, fy, viewpoint_cam.image_width, viewpoint_cam.image_height)
