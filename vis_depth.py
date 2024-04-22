@@ -72,7 +72,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         torchvision.utils.save_image(torch.from_numpy(colored_depth).permute(2, 0, 1), os.path.join(depthmap_path, '{0:05d}'.format(idx) + ".png"))
         if normal is not None:
             normal[:, depth[0]<=0] = -1
-            torchvision.utils.save_image((normal+1)/2, os.path.join(normalmap_path, '{0:05d}'.format(idx) + ".png"))
+            torchvision.utils.save_image((normal+1)/2.0, os.path.join(normalmap_path, '{0:05d}'.format(idx) + ".png"))
         break
     
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool):
@@ -85,8 +85,8 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
         if not skip_train:
              render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background)
 
-        if not skip_test:
-             render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background)
+        # if not skip_test:
+        #      render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background)
 
 def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =None):
 # def visualize(idx=0):
@@ -125,10 +125,20 @@ def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =Non
     dZx, dZy = image_gradients(depth_D)
     dZx = dZx.squeeze()
     dZy = dZy.squeeze()
-    grad_x = torch.stack([depth_D.squeeze()/fx, torch.zeros_like(depth_D.squeeze()), dZx], dim=-1)
-    grad_y = torch.stack([torch.zeros_like(depth_D.squeeze()), depth_D.squeeze()/fy, dZy], dim=-1)
-    normal_D = torch.cross(grad_x, grad_y, dim=-1)
-    normal_D = normal_D / torch.norm(normal_D, dim=-1, keepdim=True)
+    grad_x = torch.stack([depth_D.squeeze()/fx, torch.zeros_like(depth_D.squeeze()), dZx])
+    grad_y = torch.stack([torch.zeros_like(depth_D.squeeze()), depth_D.squeeze()/fy, dZy])
+    normal_D = torch.cross(grad_x, grad_y, dim=0)
+    normal_D = normal_D / torch.norm(normal_D, dim=0, keepdim=True)
+
+    # compute the angle between the depth normal and view ray, flip the normal if the angle is less than 90 degrees
+    view_ray = torch.stack([x, y, torch.ones_like(x)]).cuda()
+    view_ray = view_ray / torch.norm(view_ray, dim=0, keepdim=True)
+    angle = torch.sum(normal_D * view_ray, dim=0)
+    normal_D[:, angle>0] = -normal_D[:, angle>0]
+    
+
+    normal_RGB = (normal_D + 1) / 2.0
+    torchvision.utils.save_image(normal_RGB, os.path.join(depth_path, f"Nnormal{idx:05d}.png"))
 
 
     pcd=o3d.geometry.PointCloud()
@@ -143,12 +153,12 @@ def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =Non
     o3d.io.write_point_cloud(os.path.join(depth_path, f"output{idx:05d}.ply"), pcd)
 
     if normal is not None and vis is not None:
-        vis.set_scene_id(idx)
+        # vis.set_scene_id(idx)
         normal = normal.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
         vis.add_point_cloud(np.stack((X, Y, Z), axis=-1).reshape(-1, 3), colors= colors, name="pointcloud")
-        vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::150], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + normal.reshape(-1, 3))[::150], name="normals")
+        vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::200], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + normal.reshape(-1, 3))[::200], name="normals")
         normal_D = normal_D.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
-        vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::150], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + normal_D.reshape(-1, 3))[::150], name="normals_D")
+        vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::200], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + normal_D.reshape(-1, 3))[::200], name="normals_D")
 
 
 
