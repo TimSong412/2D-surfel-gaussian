@@ -148,10 +148,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         depth.retain_grad()
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
-        fx = fov2focal(viewpoint_cam.FoVx, viewpoint_cam.image_width)
-        fy = fov2focal(viewpoint_cam.FoVy, viewpoint_cam.image_height)
         Ll1 = l1_loss(image, gt_image)
-        Ln = norm_loss(ray_P, ray_M, depth, fx, fy)
+        Ln = norm_loss(ray_P, ray_M, depth, viewpoint_cam)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.05 * Ln
         loss.backward()
 
