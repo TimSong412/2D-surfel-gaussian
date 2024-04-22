@@ -25,6 +25,7 @@ from gaussian_renderer import GaussianModel
 from utils.graphics_utils import fov2focal
 from wis3d import Wis3D
 from torchmetrics.functional.image import image_gradients
+import matplotlib.pyplot as plt
 
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background):
@@ -66,7 +67,9 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         np.savez_compressed(os.path.join(depthfile_path, '{0:05d}'.format(idx) + ".npz"), depth=depthfile)
 
         normed_depth = (depth - depth.min()) / (depth.max() - depth.min())
-        torchvision.utils.save_image(normed_depth, os.path.join(depthmap_path, '{0:05d}'.format(idx) + ".png"))
+        colored_depth = plt.cm.viridis(normed_depth.squeeze().cpu().numpy())[..., :3]
+        
+        torchvision.utils.save_image(torch.from_numpy(colored_depth).permute(2, 0, 1), os.path.join(depthmap_path, '{0:05d}'.format(idx) + ".png"))
         if normal is not None:
             normal[:, depth[0]<=0] = -1
             torchvision.utils.save_image((normal+1)/2, os.path.join(normalmap_path, '{0:05d}'.format(idx) + ".png"))
