@@ -573,7 +573,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		out_alpha[pix_id] = weight; // 1 - T;
 		out_depth[pix_id] = D;
 		// store normal like RGB, out_normal size: C*H*W, C = 3
-		if (normal_intersect.x * ray_dir.x + normal_intersect.y * ray_dir.y + normal_intersect.z * ray_dir.z > 0)
+		if ((normal_intersect.x * ray_dir.x + normal_intersect.y * ray_dir.y + normal_intersect.z * ray_dir.z) > 0)
 		{
 			normal_intersect.x = -normal_intersect.x;
 			normal_intersect.y = -normal_intersect.y;
