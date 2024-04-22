@@ -352,6 +352,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	const uint2 pix = {pix_min.x + block.thread_index().x, pix_min.y + block.thread_index().y};
 	const uint32_t pix_id = W * pix.y + pix.x;
 	const float2 pixf = {(float)pix.x, (float)pix.y};
+	float3 ray_dir = {(pixf.x - W * 0.5f) / focal_x, (pixf.y - H * 0.5f) / focal_y, 1.0f};
 
 	float2 pix_cam = {(pixf.x - (W - 1) * 0.5f) / focal_x, (pixf.y - (H - 1) * 0.5f) / focal_y};
 
@@ -720,16 +721,22 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 #endif
 
 #ifdef Ln
-			const float3 nomral_i = collected_normal[j];
-			// dP_domega = 1
-			const float dLn_domega = (dL_dP[pix_id] + (dL_dM[pix_id * 3 + 0] * nomral_i.x + dL_dM[pix_id * 3 + 1] * nomral_i.y + dL_dM[pix_id * 3 + 2] * nomral_i.z));
+			float3 normal_i = collected_normal[j];
+			const bool reverse = (normal_i.x * ray_dir.x + normal_i.y * ray_dir.y + normal_i.z * ray_dir.z) > 0;
+			if (reverse)
+			{
+				normal_i.x = -normal_i.x;
+				normal_i.y = -normal_i.y;
+				normal_i.z = -normal_i.z;
+			}
+			const float dLn_domega = (dL_dP[pix_id] + (dL_dM[pix_id * 3 + 0] * normal_i.x + dL_dM[pix_id * 3 + 1] * normal_i.y + dL_dM[pix_id * 3 + 2] * normal_i.z));
 
 			dL_dopa += (T * (dLn_domega - accum_dLn_domega_rec));
 			last_dLn_domega = dLn_domega;
 
-			const float dL_dn0 = dL_dM[pix_id*3+0] * omega;
-			const float dL_dn1 = dL_dM[pix_id*3+1] * omega;
-			const float dL_dn2 = dL_dM[pix_id*3+2] * omega;
+			const float dL_dn0 = dL_dM[pix_id*3+0] * omega * (reverse ? -1.f : 1.f);
+			const float dL_dn1 = dL_dM[pix_id*3+1] * omega * (reverse ? -1.f : 1.f);
+			const float dL_dn2 = dL_dM[pix_id*3+2] * omega * (reverse ? -1.f : 1.f);
 			
 			// dL_dnw = R^T * dL_dn
 			const float dL_dnw0 = viewmatrix[0] * dL_dn0 + viewmatrix[1] * dL_dn1 + viewmatrix[2] * dL_dn2;
