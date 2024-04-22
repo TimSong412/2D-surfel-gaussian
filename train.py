@@ -26,6 +26,7 @@ from arguments import ModelParams, PipelineParams, OptimizationParams
 from utils.graphics_utils import fov2focal
 import open3d as o3d
 import numpy as np
+import torchvision
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -149,7 +150,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
-        Ln = norm_loss(ray_P, ray_M, depth, viewpoint_cam)
+        # depth = torch.clamp(depth, 0.1)
+        Ln, depth_norm = norm_loss(ray_P, ray_M, depth, fx, fy, viewpoint_cam.image_width, viewpoint_cam.image_height)
+        # torchvision.utils.save_image(image, f"image_{iteration:05d}.png")
+        # nandepth = depth.clone().detach()
+        # nandepth = torch.clip(nandepth, 0, 10)
+        # torchvision.utils.save_image(nandepth/10.0, f"depth_{iteration:05d}.png")
+        if torch.isnan(Ln):
+            print("Nan Loss")
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.05 * Ln
         loss.backward()
 
@@ -173,7 +181,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 progress_bar.close()
 
             # Log and save
-            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), Ld_value/(viewpoint_cam.image_height * viewpoint_cam.image_width), gradnorm)
+            training_report(tb_writer, iteration, Ll1, Ln, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), Ld_value/(viewpoint_cam.image_height * viewpoint_cam.image_width), gradnorm)
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
@@ -224,11 +232,12 @@ def prepare_output_and_logger(args):
         print("Tensorboard not available: not logging progress")
     return tb_writer
 
-def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs, Ld_value, gradnorm):
+def training_report(tb_writer, iteration, Ll1, Ln, loss, l1_loss, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs, Ld_value, gradnorm):
     if tb_writer:
         tb_writer.add_scalar('train_loss_patches/l1_loss', Ll1.item(), iteration)
         tb_writer.add_scalar('train_loss_patches/total_loss', loss.item(), iteration)
         tb_writer.add_scalar('train_loss_patches/Ld_value', Ld_value.item(), iteration)
+        tb_writer.add_scalar('train_loss_patches/norm_loss', Ln.item(), iteration)
         tb_writer.add_scalar('iter_time', elapsed, iteration) 
         tb_writer.add_scalar('total_points', scene.gaussians.get_xyz.shape[0], iteration)
         tb_writer.add_scalar('mean_opacity', scene.gaussians.get_opacity.mean(), iteration)
@@ -251,10 +260,15 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                 l1_test = 0.0
                 psnr_test = 0.0
                 for idx, viewpoint in enumerate(config['cameras']):
-                    image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0)
+                    render_pkg = renderFunc(viewpoint, scene.gaussians, *renderArgs)
+                    image = render_pkg["render"]
+                    image = torch.clamp(image, 0.0, 1.0)
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
+                    Ln, depth_norm = norm_loss(render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["depth"], fov2focal(viewpoint.FoVx, viewpoint.image_width), fov2focal(viewpoint.FoVy, viewpoint.image_height), viewpoint.image_width, viewpoint.image_height)
+                    norm_color = (1 - depth_norm) * 0.5
                     if tb_writer and (idx < 5):
                         tb_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name), image[None], global_step=iteration)
+                        tb_writer.add_images(config['name'] + "_view_{}_depthnorm/norm".format(viewpoint.image_name), norm_color[None], global_step=iteration)
                         if iteration == testing_iterations[0]:
                             tb_writer.add_images(config['name'] + "_view_{}/ground_truth".format(viewpoint.image_name), gt_image[None], global_step=iteration)
                     l1_test += l1_loss(image, gt_image).mean().double()

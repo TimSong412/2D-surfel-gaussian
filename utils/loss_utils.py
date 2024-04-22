@@ -65,29 +65,24 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True):
     else:
         return ssim_map.mean(1).mean(1).mean(1)
     
-def norm_loss(P, M, depth, viewpoint_cam):
-    if torch.norm(depth) < 0.00001:    
-        print(depth)
+def norm_loss(P, M, depth, fx, fy, W, H):
+    cx=W/2.0
+    cy=H/2.0
 
-        exit(9)
-    fx = fov2focal(viewpoint_cam.FoVx, viewpoint_cam.image_width)
-    fy = fov2focal(viewpoint_cam.FoVy, viewpoint_cam.image_height)
-    dZx, dZy = image_gradients(depth.unsqueeze(0))
-    dZx = dZx.squeeze()
-    dZy = dZy.squeeze()
-    grad_x = torch.stack([depth.squeeze()/fx, torch.zeros_like(depth.squeeze()), dZx])
-    grad_y = torch.stack([torch.zeros_like(depth.squeeze()), depth.squeeze()/fy, dZy])
-    normal = torch.cross(grad_x, grad_y, dim=0) # normal in image space
+    x=torch.arange(W).reshape(1, -1).repeat(H, 1).to(depth.device)
+    y=torch.arange(H).reshape(-1, 1).repeat(1, W).to(depth.device)
+    x=(x-cx)/fx
+    y=(y-cy)/fy
+    view_ray = torch.stack([x, y, torch.ones_like(x)]).to(depth.device)
+    view_ray = view_ray / torch.norm(view_ray, dim=0, keepdim=True)
     
-    _, H, W = normal.size()
-    normal = normal.view(3, -1).transpose(0, 1).unsqueeze(2)  # Now shape [HxW, 3, 1]
+    xyz = torch.stack([x, y, depth.squeeze()])
+    _, dPy, dPx = torch.gradient(xyz)
+    normal = torch.cross(dPx, dPy, dim=0)
+    normal = normal / torch.norm(normal, dim=0, keepdim=True)
+    angle = torch.sum(normal * view_ray, dim=0)
+    normal[:, angle > 0] *= -1.0
 
-    # Perform batch matrix multiplication
-    normal = torch.matmul(torch.Tensor(torch.inverse(viewpoint_cam.projection_matrix[:3,:3])).cuda(), normal)  # Matrix is [3, 3], tensor is [HxW, 3, 1]
-
-    normal = normal.squeeze(2).transpose(0, 1).view(3, H, W) # normal in camera space
-
-    normal = normal / torch.norm(normal, dim=0, keepdim=True) # normalize
     
-    return (P + (M * normal).sum(dim=0)).mean()
+    return (P + (M * normal).sum(dim=0)).mean(), normal
 

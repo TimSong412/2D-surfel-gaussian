@@ -379,6 +379,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	uint2 pix = {pix_min.x + block.thread_index().x, pix_min.y + block.thread_index().y};
 	uint32_t pix_id = W * pix.y + pix.x;
 	float2 pixf = {(float)pix.x, (float)pix.y};
+	float3 ray_dir = {(pixf.x - W * 0.5f) / focal_x, (pixf.y - H * 0.5f) / focal_y, 1.0f};
 
 	// Convert pixel to NDC
 	float2 pix_cam = {(pixf.x - (W - 1) * 0.5f) / focal_x, (pixf.y - (H - 1) * 0.5f) / focal_y};
@@ -572,6 +573,12 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		out_alpha[pix_id] = weight; // 1 - T;
 		out_depth[pix_id] = D;
 		// store normal like RGB, out_normal size: C*H*W, C = 3
+		if ((normal_intersect.x * ray_dir.x + normal_intersect.y * ray_dir.y + normal_intersect.z * ray_dir.z) > 0)
+		{
+			normal_intersect.x = -normal_intersect.x;
+			normal_intersect.y = -normal_intersect.y;
+			normal_intersect.z = -normal_intersect.z;
+		}
 		out_normal[0 * H * W + pix_id] = normal_intersect.x;
 		out_normal[1 * H * W + pix_id] = normal_intersect.y;
 		out_normal[2 * H * W + pix_id] = normal_intersect.z;

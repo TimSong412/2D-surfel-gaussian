@@ -352,6 +352,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	const uint2 pix = {pix_min.x + block.thread_index().x, pix_min.y + block.thread_index().y};
 	const uint32_t pix_id = W * pix.y + pix.x;
 	const float2 pixf = {(float)pix.x, (float)pix.y};
+	float3 ray_dir = {(pixf.x - W * 0.5f) / focal_x, (pixf.y - H * 0.5f) / focal_y, 1.0f};
 
 	float2 pix_cam = {(pixf.x - (W - 1) * 0.5f) / focal_x, (pixf.y - (H - 1) * 0.5f) / focal_y};
 
@@ -656,8 +657,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			// dL/dp
 			// viewmatrix[2, 0], coloumn major
-			const float dz_dp0 = viewmatrix[8];
-			const float dz_dp1 = viewmatrix[9];
+			const float dz_dp0 = viewmatrix[2];
+			const float dz_dp1 = viewmatrix[6];
 			const float dz_dp2 = viewmatrix[10];
 
 			atomicAdd(&dL_dmeans3D[global_id].x, dL_dz * dz_dp0);
@@ -668,8 +669,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			for (int k = 0; k < 3; k++)
 			{
-				dz_dsu += viewmatrix[8 + k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
-				dz_dsv += viewmatrix[8 + k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
+				dz_dsu += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
+				dz_dsv += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
 			}
 
 			atomicAdd(&dL_dscale[global_id].x, dL_dz * dz_dsu);
@@ -677,11 +678,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			// dz/dt
 
-			dL_dtu0 = dL_dz * viewmatrix[8] * collected_scale[j].x * u;
-			dL_dtu1 = dL_dz * viewmatrix[9] * collected_scale[j].x * u;
+			dL_dtu0 = dL_dz * viewmatrix[2] * collected_scale[j].x * u;
+			dL_dtu1 = dL_dz * viewmatrix[6] * collected_scale[j].x * u;
 			dL_dtu2 = dL_dz * viewmatrix[10] * collected_scale[j].x * u;
-			dL_dtv0 = dL_dz * viewmatrix[8] * collected_scale[j].y * v;
-			dL_dtv1 = dL_dz * viewmatrix[9] * collected_scale[j].y * v;
+			dL_dtv0 = dL_dz * viewmatrix[2] * collected_scale[j].y * v;
+			dL_dtv1 = dL_dz * viewmatrix[6] * collected_scale[j].y * v;
 			dL_dtv2 = dL_dz * viewmatrix[10] * collected_scale[j].y * v;
 
 			// compute gradient through quaternion
@@ -697,8 +698,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			// dL/dA
 
-			dz_du = collected_STuv[j * 6 + 0] * viewmatrix[8] + collected_STuv[j * 6 + 1] * viewmatrix[9] + collected_STuv[j * 6 + 2] * viewmatrix[10];
-			dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[8] + collected_STuv[j * 6 + 4] * viewmatrix[9] + collected_STuv[j * 6 + 5] * viewmatrix[10];
+			dz_du = collected_STuv[j * 6 + 0] * viewmatrix[2] + collected_STuv[j * 6 + 1] * viewmatrix[6] + collected_STuv[j * 6 + 2] * viewmatrix[10];
+			dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[2] + collected_STuv[j * 6 + 4] * viewmatrix[6] + collected_STuv[j * 6 + 5] * viewmatrix[10];
 
 			/*
 			same as the original but replace
@@ -720,16 +721,22 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 #endif
 
 #ifdef Ln
-			const float3 nomral_i = collected_normal[j];
-			// dP_domega = 1
-			const float dLn_domega = (dL_dP[pix_id] + (dL_dM[pix_id * 3 + 0] * nomral_i.x + dL_dM[pix_id * 3 + 1] * nomral_i.y + dL_dM[pix_id * 3 + 2] * nomral_i.z));
+			float3 normal_i = collected_normal[j];
+			const bool reverse = (normal_i.x * ray_dir.x + normal_i.y * ray_dir.y + normal_i.z * ray_dir.z) > 0;
+			if (reverse)
+			{
+				normal_i.x = -normal_i.x;
+				normal_i.y = -normal_i.y;
+				normal_i.z = -normal_i.z;
+			}
+			const float dLn_domega = (dL_dP[pix_id] + (dL_dM[pix_id * 3 + 0] * normal_i.x + dL_dM[pix_id * 3 + 1] * normal_i.y + dL_dM[pix_id * 3 + 2] * normal_i.z));
 
 			dL_dopa += (T * (dLn_domega - accum_dLn_domega_rec));
 			last_dLn_domega = dLn_domega;
 
-			const float dL_dn0 = dL_dM[pix_id*3+0] * omega;
-			const float dL_dn1 = dL_dM[pix_id*3+1] * omega;
-			const float dL_dn2 = dL_dM[pix_id*3+2] * omega;
+			const float dL_dn0 = dL_dM[pix_id*3+0] * omega * (reverse ? -1.f : 1.f);
+			const float dL_dn1 = dL_dM[pix_id*3+1] * omega * (reverse ? -1.f : 1.f);
+			const float dL_dn2 = dL_dM[pix_id*3+2] * omega * (reverse ? -1.f : 1.f);
 			
 			// dL_dnw = R^T * dL_dn
 			const float dL_dnw0 = viewmatrix[0] * dL_dn0 + viewmatrix[1] * dL_dn1 + viewmatrix[2] * dL_dn2;
@@ -751,8 +758,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			if (contributor == depth_contrib[pix_id]) {
 				// dL/dp
 				// viewmatrix[2, 0], coloumn major
-				const float dLn_dp0 = dL_dpixel_depths[pix_id] * viewmatrix[8];
-				const float dLn_dp1 = dL_dpixel_depths[pix_id] * viewmatrix[9];
+				const float dLn_dp0 = dL_dpixel_depths[pix_id] * viewmatrix[2];
+				const float dLn_dp1 = dL_dpixel_depths[pix_id] * viewmatrix[6];
 				const float dLn_dp2 = dL_dpixel_depths[pix_id] * viewmatrix[10];
 
 				atomicAdd(&dL_dmeans3D[global_id].x, dLn_dp0);
@@ -763,18 +770,18 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				dz_dsv = 0;
 				for (int k = 0; k < 3; k++)
 				{
-					dz_dsu += viewmatrix[8 + k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
-					dz_dsv += viewmatrix[8 + k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
+					dz_dsu += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
+					dz_dsv += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
 				}
 
 				atomicAdd(&dL_dscale[global_id].x, dL_dpixel_depths[pix_id] * dz_dsu);
 				atomicAdd(&dL_dscale[global_id].y, dL_dpixel_depths[pix_id] * dz_dsv);
 
-				dL_dtu0 = dL_dpixel_depths[pix_id] * viewmatrix[8] * collected_scale[j].x * u;
-				dL_dtu1 = dL_dpixel_depths[pix_id] * viewmatrix[9] * collected_scale[j].x * u;
+				dL_dtu0 = dL_dpixel_depths[pix_id] * viewmatrix[2] * collected_scale[j].x * u;
+				dL_dtu1 = dL_dpixel_depths[pix_id] * viewmatrix[6] * collected_scale[j].x * u;
 				dL_dtu2 = dL_dpixel_depths[pix_id] * viewmatrix[10] * collected_scale[j].x * u;
-				dL_dtv0 = dL_dpixel_depths[pix_id] * viewmatrix[8] * collected_scale[j].y * v;
-				dL_dtv1 = dL_dpixel_depths[pix_id] * viewmatrix[9] * collected_scale[j].y * v;
+				dL_dtv0 = dL_dpixel_depths[pix_id] * viewmatrix[2] * collected_scale[j].y * v;
+				dL_dtv1 = dL_dpixel_depths[pix_id] * viewmatrix[6] * collected_scale[j].y * v;
 				dL_dtv2 = dL_dpixel_depths[pix_id] * viewmatrix[10] * collected_scale[j].y * v;
 
 				// compute gradient through quaternion
@@ -788,8 +795,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				atomicAdd(&dL_drot[global_id].z, dLn_dy);
 				atomicAdd(&dL_drot[global_id].w, dLn_dz);
 
-				dz_du = collected_STuv[j * 6 + 0] * viewmatrix[8] + collected_STuv[j * 6 + 1] * viewmatrix[9] + collected_STuv[j * 6 + 2] * viewmatrix[10];
-				dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[8] + collected_STuv[j * 6 + 4] * viewmatrix[9] + collected_STuv[j * 6 + 5] * viewmatrix[10];
+				dz_du = collected_STuv[j * 6 + 0] * viewmatrix[2] + collected_STuv[j * 6 + 1] * viewmatrix[6] + collected_STuv[j * 6 + 2] * viewmatrix[10];
+				dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[2] + collected_STuv[j * 6 + 4] * viewmatrix[6] + collected_STuv[j * 6 + 5] * viewmatrix[10];
 
 				dL_dA_local[0][0] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhu1) + dz_dv * (-dv_dhu1));
 				dL_dA_local[0][1] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhv1) + dz_dv * (-dv_dhv1));
