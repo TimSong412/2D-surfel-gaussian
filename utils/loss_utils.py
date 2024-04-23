@@ -76,7 +76,7 @@ def norm_loss(P, M, depth, fx, fy, W, H):
     view_ray = torch.stack([x, y, torch.ones_like(x)]).to(depth.device)
     view_ray = view_ray / torch.norm(view_ray, dim=0, keepdim=True)
     
-    xyz = torch.stack([x, y, depth.squeeze()])
+    xyz = torch.stack([x*depth.squeeze(), y*depth.squeeze(), depth.squeeze()])
     _, dPy, dPx = torch.gradient(xyz)
     normal = torch.cross(dPx, dPy, dim=0)
     normal = normal / torch.norm(normal, dim=0, keepdim=True)
