@@ -520,7 +520,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			if (T >= 0.5f)
 			{
-				// D = intersect_c.z;
+				D = intersect_c.z;
 				depth_contributor = last_contributor; // TODO: may be last_contributor, to match the backward 
 				
 				if (glm::abs(collected_normal[j].x * collected_normal[j].x + collected_normal[j].y * collected_normal[j].y + collected_normal[j].z * collected_normal[j].z - 1) > 0.0001f)
@@ -562,7 +562,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			normal_blend.y += omega * normal_i.y;
 			normal_blend.z += omega * normal_i.z;
 
-			D += omega * intersect_c.z;
+			// D += omega * intersect_c.z;
 
 			// if (intersect_c.z < 0 && inside){
 				// 	printf("%f at bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", intersect_c.z, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
@@ -585,7 +585,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		for (int ch = 0; ch < CHANNELS; ch++)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
 		out_alpha[pix_id] = weight; // 1 - T;
-		out_depth[pix_id] = D / P_acc;
+		out_depth[pix_id] = D;// / P_acc;
 		// store normal like RGB, out_normal size: C*H*W, C = 3
 		
 		out_normal[0 * H * W + pix_id] = normal_blend.x / P_acc;
