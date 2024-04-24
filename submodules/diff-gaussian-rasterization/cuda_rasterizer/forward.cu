@@ -491,14 +491,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			intersect_c = transformPoint4x3(intersect_w, viewmatrix);
 
 			float G_hat = max(G_u, G_xc);
-			// G_u = G_xc;
 
 			float alpha = min(0.99f, con_o.w * G_hat);
-
-			// if (blockIdx.x == 49 && blockIdx.y == 10 && threadIdx.x == 6 && threadIdx.y == 14 && contributor == 50)
-			// {
-			// 	printf("forward contributor = %d, z= %f, G_u = %f, G_xc = %f, alpha = %f\n", contributor, intersect_c.z, G_u, G_xc, alpha);
-			// }
 
 			if (intersect_c.z <= near)
 				continue;
@@ -527,16 +521,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				{
 					printf("load normal wrong\n");
 				}
-				// D = depths[collected_id[j]];
-				// n_i = {collected_normal[j * 3 + 0], collected_normal[j * 3 + 1], collected_normal[j * 3 + 2]};
+				
 			}
-
-
-			// if (blockIdx.x == 49 && blockIdx.y == 10 && threadIdx.x == 6 && threadIdx.y == 14)
-			// {
-			// 	printf("forward contributor = %d, z= %f, P_acc= %f\n", contributor, intersect_c.z, P_acc);
-			// 	// printf("Gu %f G_xc %f\n", G_u, G_xc);
-			// }
 
 			ndc_m = z2ndc(intersect_c.z);
 			omega = alpha * T;
@@ -561,13 +547,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			normal_blend.x += omega * normal_i.x;
 			normal_blend.y += omega * normal_i.y;
 			normal_blend.z += omega * normal_i.z;
-
-			// D += omega * intersect_c.z;
-
-			// if (intersect_c.z < 0 && inside){
-				// 	printf("%f at bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", intersect_c.z, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
-			// }
-			// assert(last_z >= 0 || !inside);
 
 			T = test_T;
 
@@ -599,10 +578,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		ray_M[1 * H * W + pix_id] = M_acc.y;
 		ray_M[2 * H * W + pix_id] = M_acc.z;		
 
-		// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
-		// {
-		// 	printf("forward loss = %f\n", thread_Ld);
-		// }
 	}
 	
 }

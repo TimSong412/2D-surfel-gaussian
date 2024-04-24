@@ -512,26 +512,13 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			float alpha = min(0.99f, con_o.w * G_hat);
 
-			// if (blockIdx.x == 49 && blockIdx.y == 10 && threadIdx.x == 6 && threadIdx.y == 14 && contributor == 49)
-			// {
-			// 	printf("backward contributor = %d, z= %f, G_u = %f, G_xc = %f, alpha = %f\n", contributor, intersect_c.z, G_u, G_xc, alpha);
-			// }
-
 			if (intersect_c.z <= near)
 			{
-				// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
-				// {
-				// 	printf("backward contributor = %d, close\n", contributor);
-				// }
 				continue;
 			}
 
 			if (alpha < 1.0f / 255.0f)
 			{
-				// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
-				// {
-				// 	printf("backward contributor = %d, small alpha\n", contributor);
-				// }
 				continue;
 			}
 
@@ -607,17 +594,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			// A is AT here
 			glm::mat3 dL_dA_local = glm::mat3(0.0f);
-
-			float dz_du = 0;
-			float dz_dv = 0;
-			float dz_dsu = 0; // ti =sti / s
-			float dz_dsv = 0;
-			float dL_dtu0 = 0;
-			float dL_dtu1 = 0;
-			float dL_dtu2 = 0;
-			float dL_dtv0 = 0;
-			float dL_dtv1 = 0;
-			float dL_dtv2 = 0;
 			glm::vec4 q = collected_rotation[j]; // / glm::length(rot);
 
 			float r = q.x;
@@ -633,62 +609,87 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			Q_acc -= omega * ndc_m;
 			Q2Q_acc -= omega * ndc_m * ndc_m;
 
-			
-
+// Logical OR using macro
+#ifdef Ld
+	// dz/dp
+	// viewmatrix[2, 0], coloumn major
+	const float dz_dp0 = viewmatrix[2];
+	const float dz_dp1 = viewmatrix[6];
+	const float dz_dp2 = viewmatrix[10];
+	// dz/du dz/dv
+	const float dz_du = collected_STuv[j * 6 + 0] * viewmatrix[2] + collected_STuv[j * 6 + 1] * viewmatrix[6] + collected_STuv[j * 6 + 2] * viewmatrix[10];
+	const float	dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[2] + collected_STuv[j * 6 + 4] * viewmatrix[6] + collected_STuv[j * 6 + 5] * viewmatrix[10];
+	// dz/dtu dz/dtv
+	const float	dz_dtu0 = viewmatrix[2] * collected_scale[j].x * u;
+	const float	dz_dtu1 = viewmatrix[6] * collected_scale[j].x * u;
+	const float	dz_dtu2 = viewmatrix[10] * collected_scale[j].x * u;
+	const float	dz_dtv0 = viewmatrix[2] * collected_scale[j].y * v;
+	const float	dz_dtv1 = viewmatrix[6] * collected_scale[j].y * v;
+	const float	dz_dtv2 = viewmatrix[10] * collected_scale[j].y * v;
+	// dz/ds
+	float dz_dsu = (viewmatrix[2] * collected_STuv[j * 6 + 0] + viewmatrix[6] * collected_STuv[j * 6 + 1] + viewmatrix[10] * collected_STuv[j * 6 + 2]) * u / collected_scale[j].x; // ti =sti / s
+	float dz_dsv = (viewmatrix[2] * collected_STuv[j * 6 + 3] + viewmatrix[6] * collected_STuv[j * 6 + 4] + viewmatrix[10] * collected_STuv[j * 6 + 5]) * v / collected_scale[j].y;;
+	// for (int k = 0; k < 3; k++)
+	// {
+	// 	dz_dsu += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
+	// 	dz_dsv += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
+	// }
+#else
+#ifdef Ln
+	// dz/dp
+	// viewmatrix[2, 0], coloumn major
+	const float dz_dp0 = viewmatrix[2];
+	const float dz_dp1 = viewmatrix[6];
+	const float dz_dp2 = viewmatrix[10];
+	// dz/du dz/dv
+	const float dz_du = collected_STuv[j * 6 + 0] * viewmatrix[2] + collected_STuv[j * 6 + 1] * viewmatrix[6] + collected_STuv[j * 6 + 2] * viewmatrix[10];
+	const float	dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[2] + collected_STuv[j * 6 + 4] * viewmatrix[6] + collected_STuv[j * 6 + 5] * viewmatrix[10];
+	// dz/dtu dz/dtv
+	const float	dz_dtu0 = viewmatrix[2] * collected_scale[j].x * u;
+	const float	dz_dtu1 = viewmatrix[6] * collected_scale[j].x * u;
+	const float	dz_dtu2 = viewmatrix[10] * collected_scale[j].x * u;
+	const float	dz_dtv0 = viewmatrix[2] * collected_scale[j].y * v;
+	const float	dz_dtv1 = viewmatrix[6] * collected_scale[j].y * v;
+	const float	dz_dtv2 = viewmatrix[10] * collected_scale[j].y * v;
+	// dz/ds
+	float dz_dsu = (viewmatrix[2] * collected_STuv[j * 6 + 0] + viewmatrix[6] * collected_STuv[j * 6 + 1] + viewmatrix[10] * collected_STuv[j * 6 + 2]) * u / collected_scale[j].x; // ti =sti / s
+	float dz_dsv = (viewmatrix[2] * collected_STuv[j * 6 + 3] + viewmatrix[6] * collected_STuv[j * 6 + 4] + viewmatrix[10] * collected_STuv[j * 6 + 5]) * v / collected_scale[j].y;;
+	// for (int k = 0; k < 3; k++)
+	// {
+	// 	dz_dsu += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
+	// 	dz_dsv += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
+	// }
+#endif
+#endif
 
 #ifdef Ld
 			const float dLd_domega = Wd * (ndc_m * ndc_m * P_start + Q2Q_start - 2 * ndc_m * Q_start) / (W * H);
 
 			dL_dopa += (T * (dLd_domega - accum_dLd_domega_rec));
 			last_dLd_domega = dLd_domega;
-
 			thread_Ld += Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)) / (W * H);
 
 			// dL/dm
-
 			const float dL_dm = Wd * 2 * omega * (ndc_m * P_start - Q_start) / (W * H);
-
-
-
 			dm_dz = 2 * far * near / ((far - near) * intersect_c.z * intersect_c.z);
-			// dm_dz = 2.0f / (far - near);
-
 			dL_dz = dL_dm * dm_dz;
-
-			// if (blockIdx.x == 30 && blockIdx.y == 50 && threadIdx.x == 8 && threadIdx.y == 8)
-			// {
-			// 	printf("back contributor= %d, dL_domega = %f, dL_dz = %f, dL_dopa = %f, omega = %f, z = %f, alpha = %f, T = %f, Ld = %f\n", contributor, dLd_domega, dL_dz, (T * (dLd_domega - accum_dLd_domega_rec)), omega, intersect_c.z, alpha, T, Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)));
-			// }
-
-			// dL/dp
-			// viewmatrix[2, 0], coloumn major
-			const float dz_dp0 = viewmatrix[2];
-			const float dz_dp1 = viewmatrix[6];
-			const float dz_dp2 = viewmatrix[10];
 
 			atomicAdd(&dL_dmeans3D[global_id].x, dL_dz * dz_dp0);
 			atomicAdd(&dL_dmeans3D[global_id].y, dL_dz * dz_dp1);
 			atomicAdd(&dL_dmeans3D[global_id].z, dL_dz * dz_dp2);
 
 			// dz/ds
-
-			for (int k = 0; k < 3; k++)
-			{
-				dz_dsu += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
-				dz_dsv += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
-			}
-
 			atomicAdd(&dL_dscale[global_id].x, dL_dz * dz_dsu);
 			atomicAdd(&dL_dscale[global_id].y, dL_dz * dz_dsv);
 
 			// dz/dt
 
-			dL_dtu0 = dL_dz * viewmatrix[2] * collected_scale[j].x * u;
-			dL_dtu1 = dL_dz * viewmatrix[6] * collected_scale[j].x * u;
-			dL_dtu2 = dL_dz * viewmatrix[10] * collected_scale[j].x * u;
-			dL_dtv0 = dL_dz * viewmatrix[2] * collected_scale[j].y * v;
-			dL_dtv1 = dL_dz * viewmatrix[6] * collected_scale[j].y * v;
-			dL_dtv2 = dL_dz * viewmatrix[10] * collected_scale[j].y * v;
+			const float dL_dtu0 = dL_dz * dz_dtu0;
+			const float dL_dtu1 = dL_dz * dz_dtu1;
+			const float dL_dtu2 = dL_dz * dz_dtu2;
+			const float dL_dtv0 = dL_dz * dz_dtv0;
+			const float dL_dtv1 = dL_dz * dz_dtv1;
+			const float dL_dtv2 = dL_dz * dz_dtv2;
 
 			// compute gradient through quaternion
 			float dLd_dr = 2.0f * (z * (dL_dtu1 - dL_dtv0) - y * dL_dtu2 + x * dL_dtv2);
@@ -702,10 +703,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&dL_drot[global_id].w, dLd_dz);
 
 			// dL/dA
-
-			dz_du = collected_STuv[j * 6 + 0] * viewmatrix[2] + collected_STuv[j * 6 + 1] * viewmatrix[6] + collected_STuv[j * 6 + 2] * viewmatrix[10];
-			dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[2] + collected_STuv[j * 6 + 4] * viewmatrix[6] + collected_STuv[j * 6 + 5] * viewmatrix[10];
-
 			/*
 			same as the original but replace
 										dL/dG with dL/dz
@@ -763,32 +760,19 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			if (contributor == depth_contrib[pix_id]) {
 				// dL/dp
-				// viewmatrix[2, 0], coloumn major
-				const float dLn_dp0 = dL_dpixel_depths[pix_id] * viewmatrix[2];
-				const float dLn_dp1 = dL_dpixel_depths[pix_id] * viewmatrix[6];
-				const float dLn_dp2 = dL_dpixel_depths[pix_id] * viewmatrix[10];
-
-				atomicAdd(&dL_dmeans3D[global_id].x, dLn_dp0);
-				atomicAdd(&dL_dmeans3D[global_id].y, dLn_dp1);
-				atomicAdd(&dL_dmeans3D[global_id].z, dLn_dp2);
-
-				dz_dsu = 0;
-				dz_dsv = 0;
-				for (int k = 0; k < 3; k++)
-				{
-					dz_dsu += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
-					dz_dsv += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
-				}
+				atomicAdd(&dL_dmeans3D[global_id].x, dL_dpixel_depths[pix_id] * dz_dp0);
+				atomicAdd(&dL_dmeans3D[global_id].y, dL_dpixel_depths[pix_id] * dz_dp1);
+				atomicAdd(&dL_dmeans3D[global_id].z, dL_dpixel_depths[pix_id] * dz_dp2);
 
 				atomicAdd(&dL_dscale[global_id].x, dL_dpixel_depths[pix_id] * dz_dsu);
 				atomicAdd(&dL_dscale[global_id].y, dL_dpixel_depths[pix_id] * dz_dsv);
 
-				dL_dtu0 = dL_dpixel_depths[pix_id] * viewmatrix[2] * collected_scale[j].x * u;
-				dL_dtu1 = dL_dpixel_depths[pix_id] * viewmatrix[6] * collected_scale[j].x * u;
-				dL_dtu2 = dL_dpixel_depths[pix_id] * viewmatrix[10] * collected_scale[j].x * u;
-				dL_dtv0 = dL_dpixel_depths[pix_id] * viewmatrix[2] * collected_scale[j].y * v;
-				dL_dtv1 = dL_dpixel_depths[pix_id] * viewmatrix[6] * collected_scale[j].y * v;
-				dL_dtv2 = dL_dpixel_depths[pix_id] * viewmatrix[10] * collected_scale[j].y * v;
+				const float dLn_dtu0 = dL_dpixel_depths[pix_id] * dz_dtu0;
+				const float dL_dtu1 = dL_dpixel_depths[pix_id] * dz_dtu1;
+				const float dL_dtu2 = dL_dpixel_depths[pix_id] * dz_dtu2;
+				const float dL_dtv0 = dL_dpixel_depths[pix_id] * dz_dtv0;
+				const float dL_dtv1 = dL_dpixel_depths[pix_id] * dz_dtv1;
+				const float dL_dtv2 = dL_dpixel_depths[pix_id] * dz_dtv2;
 
 				// compute gradient through quaternion
 				dLn_dr = 2.0f * (z * (dL_dtu1 - dL_dtv0) - y * dL_dtu2 + x * dL_dtv2);
@@ -800,9 +784,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				atomicAdd(&dL_drot[global_id].y, dLn_dx);
 				atomicAdd(&dL_drot[global_id].z, dLn_dy);
 				atomicAdd(&dL_drot[global_id].w, dLn_dz);
-
-				dz_du = collected_STuv[j * 6 + 0] * viewmatrix[2] + collected_STuv[j * 6 + 1] * viewmatrix[6] + collected_STuv[j * 6 + 2] * viewmatrix[10];
-				dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[2] + collected_STuv[j * 6 + 4] * viewmatrix[6] + collected_STuv[j * 6 + 5] * viewmatrix[10];
 
 				dL_dA_local[0][0] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhu1) + dz_dv * (-dv_dhu1));
 				dL_dA_local[0][1] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhv1) + dz_dv * (-dv_dhv1));
@@ -867,23 +848,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&(dL_dA[global_id * 9 + 8]), dL_dA_local[2][2]);
 		}
 	}
-	// float diff = glm::abs(P_acc - 0.0f);
-	// if (diff > 0.01f && inside)
-	// {
-	// 	printf("P_start: %f, P_acc: %f, bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", P_start, P_acc, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
-	// }
-	// diff = glm::abs(Q_acc - 0.0f);
-	// if (diff > 0.01f && inside)
-	// {
-	// 	printf("Q_start: %f, Q_acc: %f, bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", Q_start, Q_acc, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
-	// }
-
+	
 	atomicAdd(Ld_value, thread_Ld);
-
-	// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
-	// {
-	// 	printf("backward loss = %f\n", thread_Ld);
-	// }
 }
 
 void BACKWARD::preprocess(

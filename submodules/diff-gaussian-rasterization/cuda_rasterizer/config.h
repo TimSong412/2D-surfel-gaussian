@@ -22,6 +22,6 @@
 #define near 0.2f
 
 #define Ln
-#define Wn 1.0f
+#define Wn 0.05f
 
 #endif
