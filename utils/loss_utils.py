@@ -84,5 +84,5 @@ def norm_loss(P, M, depth, fx, fy, W, H):
     normal[:, angle > 0] *= -1.0
 
     
-    return (P + (M * normal).sum(dim=0)).mean(), normal
+    return (P - (M * normal).sum(dim=0, keepdim=True)).mean(), normal, (P - (M * normal).sum(dim=0, keepdim=True))/2.0
 

@@ -109,7 +109,7 @@ def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =Non
     cx=W/2
     cy=H/2
 
-    Ln, normal_L = norm_loss(ray_P, ray_M, depth, fx, fy, W, H)
+    Ln, normal_L, lossmap = norm_loss(ray_P, ray_M, depth, fx, fy, W, H)
     print("Ln: ", Ln)
     
 
@@ -180,7 +180,7 @@ def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =Non
     # normal_RGB = (1-normal_D) / 2.0
     # torchvision.utils.save_image(normal_RGB, os.path.join(normal_path, f"N{idx:05d}.png"))
 
-    Z = torch.clamp(Z, 1, 15)
+    Z = np.clip(Z, 1.0, 15)
     pcd=o3d.geometry.PointCloud()
     pcd.points=o3d.utility.Vector3dVector(np.stack((X, Y, Z), axis=-1).reshape(-1, 3))
     colors = rendering.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()
@@ -198,19 +198,20 @@ def visualize(rendering,depth,view,idx, depth_path, normal=None, vis: Wis3D =Non
         # vis.set_scene_id(idx)
         normal = normal.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
         vis.add_point_cloud(np.stack((X, Y, Z), axis=-1).reshape(-1, 3), colors= colors, name="pointcloud")
-        vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::100], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + 0.2*normal.reshape(-1, 3))[::100], name="normals")
+        stride = 111
+        vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::stride], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + 0.2*normal.reshape(-1, 3))[::stride], name="normals")
         # normal_D = normal_D.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
         # vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::100], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + 0.2*normal_D.reshape(-1, 3))[::100], name="normals_D")
         # grad_x = grad_x.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
         # vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::100], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + 0.2*grad_x.reshape(-1, 3))[::100], name="grad_x")
         # grad_y = grad_y.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
         # vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::100], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + 0.2*grad_y.reshape(-1, 3))[::100], name="grad_y")
-        dPx = dPx.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
-        vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::100], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + 0.2*dPx.reshape(-1, 3))[::100], name="dPx")
-        dPy = dPy.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
-        vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::100], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + 0.2*dPy.reshape(-1, 3))[::100], name="dPy")
+        # dPx = dPx.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
+        # vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::stride], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + 0.2*dPx.reshape(-1, 3))[::stride], name="dPx")
+        # dPy = dPy.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
+        # vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::stride], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + 0.2*dPy.reshape(-1, 3))[::stride], name="dPy")
         normal_P = normal_P.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()[valid_mask.flatten()]
-        vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::100], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + 0.2*normal_P.reshape(-1, 3))[::100], name="normal_P")
+        vis.add_lines(np.stack((X, Y, Z), axis=-1).reshape(-1, 3)[::stride], (np.stack((X, Y, Z), axis=-1).reshape(-1, 3) + 0.2*normal_P.reshape(-1, 3))[::stride], name="normal_P")
 
 
 

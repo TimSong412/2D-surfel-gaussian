@@ -147,6 +147,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         ray_P.retain_grad()
         ray_M.retain_grad()
         depth.retain_grad()
+        # if (ray_P == 0.0).sum() > 0:
+        #     print("Zero ray_P")
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
@@ -154,14 +156,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         newdepth.retain_grad()
         fx = fov2focal(viewpoint_cam.FoVx, viewpoint_cam.image_width)
         fy = fov2focal(viewpoint_cam.FoVy, viewpoint_cam.image_height)
-        Ln, depth_norm = norm_loss(ray_P, ray_M, newdepth, fx, fy, viewpoint_cam.image_width, viewpoint_cam.image_height)
+        Ln, depth_norm, loss_map = norm_loss(ray_P, ray_M, newdepth, fx, fy, viewpoint_cam.image_width, viewpoint_cam.image_height)
         # torchvision.utils.save_image(image, f"image_{iteration:05d}.png")
         # nandepth = depth.clone().detach()
         # nandepth = torch.clip(nandepth, 0, 10)
         # torchvision.utils.save_image(nandepth/10.0, f"depth_{iteration:05d}.png")
         if torch.isnan(Ln):
             print("Nan Loss")
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.05 * Ln
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.1 * Ln
         loss.backward()
 
         # gradient clipping
@@ -266,12 +268,21 @@ def training_report(tb_writer, iteration, Ll1, Ln, loss, l1_loss, elapsed, testi
                     render_pkg = renderFunc(viewpoint, scene.gaussians, *renderArgs)
                     image = render_pkg["render"]
                     image = torch.clamp(image, 0.0, 1.0)
+                    render_normal = render_pkg["normal"]
+                    render_normal /= render_normal.norm(dim=0, keepdim=True) 
+                    render_normal_color = (1 - render_normal) * 0.5
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
-                    Ln, depth_norm = norm_loss(render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["depth"], fov2focal(viewpoint.FoVx, viewpoint.image_width), fov2focal(viewpoint.FoVy, viewpoint.image_height), viewpoint.image_width, viewpoint.image_height)
+                    Ln, depth_norm, loss_map = norm_loss(render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["depth"], fov2focal(viewpoint.FoVx, viewpoint.image_width), fov2focal(viewpoint.FoVy, viewpoint.image_height), viewpoint.image_width, viewpoint.image_height)
                     norm_color = (1 - depth_norm) * 0.5
+                    similar_map = ((render_normal * depth_norm).sum(dim=0, keepdim=True) + 1) / 2.0
+
                     if tb_writer and (idx < 5):
                         tb_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name), image[None], global_step=iteration)
                         tb_writer.add_images(config['name'] + "_view_{}_depthnorm/norm".format(viewpoint.image_name), norm_color[None], global_step=iteration)
+                        tb_writer.add_images(config['name'] + "_view_{}_normal".format(viewpoint.image_name), render_normal_color[None], global_step=iteration)
+                        tb_writer.add_images(config['name'] + "_view_{}_lossmap/loss".format(viewpoint.image_name), loss_map[None], global_step=iteration)
+                        tb_writer.add_images(config['name'] + "_view_{}_lossmap/similar".format(viewpoint.image_name), similar_map[None], global_step=iteration)
+                        tb_writer.add_images(config['name'] + "_view_{}_ray_P".format(viewpoint.image_name), render_pkg["ray_P"][None], global_step=iteration)
                         if iteration == testing_iterations[0]:
                             tb_writer.add_images(config['name'] + "_view_{}/ground_truth".format(viewpoint.image_name), gt_image[None], global_step=iteration)
                     l1_test += l1_loss(image, gt_image).mean().double()
@@ -301,7 +312,7 @@ if __name__ == "__main__":
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[i*1000 for i in range(30)])
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[i*1000 for i in range(30)])
     parser.add_argument("--quiet", action="store_true")
-    parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
+    parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[4000])
     parser.add_argument("--start_checkpoint", type=str, default = None)
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
