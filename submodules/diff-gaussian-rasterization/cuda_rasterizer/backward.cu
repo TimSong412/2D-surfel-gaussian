@@ -436,6 +436,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	const float Q_start = Q_acc;
 	const float Q2Q_start = Q2Q_acc;
 
+	done = done || (P_acc == 0.0f);
+
 	float thread_Ld = 0.0f;
 
 	// Traverse all Gaussians

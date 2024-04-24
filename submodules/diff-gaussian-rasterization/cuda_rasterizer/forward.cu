@@ -415,6 +415,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float3 intersect_w;
 	float3 intersect_c;
 	float3 normal_intersect;
+	float3 normal_blend = {0.0f, 0.0f, 0.0f};
 	float P_acc = 0.0f;
 	float Q_acc = 0.0f;
 	float Q2Q_acc = 0.0f;
@@ -519,9 +520,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			if (T >= 0.5f)
 			{
-				D = intersect_c.z;
+				// D = intersect_c.z;
 				depth_contributor = last_contributor; // TODO: may be last_contributor, to match the backward 
-				normal_intersect = collected_normal[j];
+				
 				if (glm::abs(collected_normal[j].x * collected_normal[j].x + collected_normal[j].y * collected_normal[j].y + collected_normal[j].z * collected_normal[j].z - 1) > 0.0001f)
 				{
 					printf("load normal wrong\n");
@@ -529,6 +530,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				// D = depths[collected_id[j]];
 				// n_i = {collected_normal[j * 3 + 0], collected_normal[j * 3 + 1], collected_normal[j * 3 + 2]};
 			}
+
 
 			// if (blockIdx.x == 49 && blockIdx.y == 10 && threadIdx.x == 6 && threadIdx.y == 14)
 			// {
@@ -548,7 +550,19 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			M_acc.x += omega * collected_normal[j].x;
 			M_acc.y += omega * collected_normal[j].y;
 			M_acc.z += omega * collected_normal[j].z;
-			
+
+			float3 normal_i = collected_normal[j];
+			if ((normal_i.x * ray_dir.x + normal_i.y * ray_dir.y + normal_i.z * ray_dir.z) > 0)
+			{
+				normal_i.x = -normal_i.x;
+				normal_i.y = -normal_i.y;
+				normal_i.z = -normal_i.z;
+			}
+			normal_blend.x += omega * normal_i.x;
+			normal_blend.y += omega * normal_i.y;
+			normal_blend.z += omega * normal_i.z;
+
+			D += omega * intersect_c.z;
 
 			// if (intersect_c.z < 0 && inside){
 				// 	printf("%f at bIdx.x: %d, bIdx.y: %d, tIdx.x: %d, tIdx.y: %d\n", intersect_c.z, blockIdx.x, blockIdx.y, threadIdx.x, threadIdx.y);
@@ -565,30 +579,25 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 	// All threads that treat valid pixel write out their final
 	// rendering data to the frame and auxiliary buffers.
-	if (inside)
+	if (inside && P_acc > 0.0f)
 	{
 		n_contrib[pix_id] = last_contributor;
 		for (int ch = 0; ch < CHANNELS; ch++)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
 		out_alpha[pix_id] = weight; // 1 - T;
-		out_depth[pix_id] = D;
+		out_depth[pix_id] = D / P_acc;
 		// store normal like RGB, out_normal size: C*H*W, C = 3
-		if ((normal_intersect.x * ray_dir.x + normal_intersect.y * ray_dir.y + normal_intersect.z * ray_dir.z) > 0)
-		{
-			normal_intersect.x = -normal_intersect.x;
-			normal_intersect.y = -normal_intersect.y;
-			normal_intersect.z = -normal_intersect.z;
-		}
-		out_normal[0 * H * W + pix_id] = normal_intersect.x;
-		out_normal[1 * H * W + pix_id] = normal_intersect.y;
-		out_normal[2 * H * W + pix_id] = normal_intersect.z;
+		
+		out_normal[0 * H * W + pix_id] = normal_blend.x / P_acc;
+		out_normal[1 * H * W + pix_id] = normal_blend.y / P_acc;
+		out_normal[2 * H * W + pix_id] = normal_blend.z / P_acc;
 		ray_P[pix_id] = P_acc;
 		ray_Q[pix_id] = Q_acc;
 		ray_Q2Q[pix_id] = Q2Q_acc;
 		depth_contrib[pix_id] = depth_contributor;
-		ray_M[3 * pix_id + 0] = M_acc.x;
-		ray_M[3 * pix_id + 1] = M_acc.y;
-		ray_M[3 * pix_id + 2] = M_acc.z;
+		ray_M[0 * H * W + pix_id] = M_acc.x;
+		ray_M[1 * H * W + pix_id] = M_acc.y;
+		ray_M[2 * H * W + pix_id] = M_acc.z;		
 
 		// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 8 && threadIdx.y == 8)
 		// {
