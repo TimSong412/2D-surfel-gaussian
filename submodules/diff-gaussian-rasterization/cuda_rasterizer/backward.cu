@@ -684,18 +684,18 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			// dz/dt
 
-			const float dL_dtu0 = dL_dz * dz_dtu0;
-			const float dL_dtu1 = dL_dz * dz_dtu1;
-			const float dL_dtu2 = dL_dz * dz_dtu2;
-			const float dL_dtv0 = dL_dz * dz_dtv0;
-			const float dL_dtv1 = dL_dz * dz_dtv1;
-			const float dL_dtv2 = dL_dz * dz_dtv2;
+			const float dLd_dtu0 = dL_dz * dz_dtu0;
+			const float dLd_dtu1 = dL_dz * dz_dtu1;
+			const float dLd_dtu2 = dL_dz * dz_dtu2;
+			const float dLd_dtv0 = dL_dz * dz_dtv0;
+			const float dLd_dtv1 = dL_dz * dz_dtv1;
+			const float dLd_dtv2 = dL_dz * dz_dtv2;
 
 			// compute gradient through quaternion
-			float dLd_dr = 2.0f * (z * (dL_dtu1 - dL_dtv0) - y * dL_dtu2 + x * dL_dtv2);
-			float dLd_dx = 2.0f * (y * (dL_dtu1 + dL_dtv0) + z * dL_dtu2 + r * dL_dtv2 - 2.0f * x * dL_dtv1);
-			float dLd_dy = 2.0f * (x * (dL_dtu1 + dL_dtv0) - r * dL_dtu2 + z * dL_dtv2 - 2.0f * y * dL_dtu0);
-			float dLd_dz = 2.0f * (r * (dL_dtu1 - dL_dtv0) + x * dL_dtu2 + y * dL_dtv2 - 2.0f * z * (dL_dtu0 + dL_dtv1));
+			float dLd_dr = 2.0f * (z * (dLd_dtu1 - dLd_dtv0) - y * dLd_dtu2 + x * dLd_dtv2);
+			float dLd_dx = 2.0f * (y * (dLd_dtu1 + dLd_dtv0) + z * dLd_dtu2 + r * dLd_dtv2 - 2.0f * x * dLd_dtv1);
+			float dLd_dy = 2.0f * (x * (dLd_dtu1 + dLd_dtv0) - r * dLd_dtu2 + z * dLd_dtv2 - 2.0f * y * dLd_dtu0);
+			float dLd_dz = 2.0f * (r * (dLd_dtu1 - dLd_dtv0) + x * dLd_dtu2 + y * dLd_dtv2 - 2.0f * z * (dLd_dtu0 + dLd_dtv1));
 
 			atomicAdd(&dL_drot[global_id].x, dLd_dr);
 			atomicAdd(&dL_drot[global_id].y, dLd_dx);
@@ -768,17 +768,17 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				atomicAdd(&dL_dscale[global_id].y, dL_dpixel_depths[pix_id] * dz_dsv);
 
 				const float dLn_dtu0 = dL_dpixel_depths[pix_id] * dz_dtu0;
-				const float dL_dtu1 = dL_dpixel_depths[pix_id] * dz_dtu1;
-				const float dL_dtu2 = dL_dpixel_depths[pix_id] * dz_dtu2;
-				const float dL_dtv0 = dL_dpixel_depths[pix_id] * dz_dtv0;
-				const float dL_dtv1 = dL_dpixel_depths[pix_id] * dz_dtv1;
-				const float dL_dtv2 = dL_dpixel_depths[pix_id] * dz_dtv2;
+				const float dLn_dtu1 = dL_dpixel_depths[pix_id] * dz_dtu1;
+				const float dLn_dtu2 = dL_dpixel_depths[pix_id] * dz_dtu2;
+				const float dLn_dtv0 = dL_dpixel_depths[pix_id] * dz_dtv0;
+				const float dLn_dtv1 = dL_dpixel_depths[pix_id] * dz_dtv1;
+				const float dLn_dtv2 = dL_dpixel_depths[pix_id] * dz_dtv2;
 
 				// compute gradient through quaternion
-				dLn_dr = 2.0f * (z * (dL_dtu1 - dL_dtv0) - y * dL_dtu2 + x * dL_dtv2);
-				dLn_dx = 2.0f * (y * (dL_dtu1 + dL_dtv0) + z * dL_dtu2 + r * dL_dtv2 - 2.0f * x * dL_dtv1);
-				dLn_dy = 2.0f * (x * (dL_dtu1 + dL_dtv0) - r * dL_dtu2 + z * dL_dtv2 - 2.0f * y * dL_dtu0);
-				dLn_dz = 2.0f * (r * (dL_dtu1 - dL_dtv0) + x * dL_dtu2 + y * dL_dtv2 - 2.0f * z * (dL_dtu0 + dL_dtv1));
+				dLn_dr = 2.0f * (z * (dLn_dtu1 - dLn_dtv0) - y * dLn_dtu2 + x * dLn_dtv2);
+				dLn_dx = 2.0f * (y * (dLn_dtu1 + dLn_dtv0) + z * dLn_dtu2 + r * dLn_dtv2 - 2.0f * x * dLn_dtv1);
+				dLn_dy = 2.0f * (x * (dLn_dtu1 + dLn_dtv0) - r * dLn_dtu2 + z * dLn_dtv2 - 2.0f * y * dLn_dtu0);
+				dLn_dz = 2.0f * (r * (dLn_dtu1 - dLn_dtv0) + x * dLn_dtu2 + y * dLn_dtv2 - 2.0f * z * (dLn_dtu0 + dLn_dtv1));
 
 				atomicAdd(&dL_drot[global_id].x, dLn_dr);
 				atomicAdd(&dL_drot[global_id].y, dLn_dx);
