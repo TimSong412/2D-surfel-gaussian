@@ -510,8 +510,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// Eq. (3) from 3D Gaussian splatting paper.
 			for (int ch = 0; ch < CHANNELS; ch++)
 				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
-			weight += alpha * T;
-
+#ifdef BlendingDepth
+			D += intersect_c.z * alpha * T;
+#else
 			if (T >= 0.5f)
 			{
 				D = intersect_c.z;
@@ -523,6 +524,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				}
 				
 			}
+#endif
+			weight += alpha * T;
+
+
+			
 
 			ndc_m = z2ndc(intersect_c.z);
 			omega = alpha * T;

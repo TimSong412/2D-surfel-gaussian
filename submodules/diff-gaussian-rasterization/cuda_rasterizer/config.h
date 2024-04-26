@@ -24,4 +24,6 @@
 #define Ln
 #define Wn 0.05f
 
+#define BlendingDepth
+
 #endif
