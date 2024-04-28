@@ -443,6 +443,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 	float thread_Ld = 0.0f;
 
+	// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 0 && threadIdx.y == 0)
+	// {
+	// 	printf("backray pix_x= %d; pix_y= %d; viewmat= [%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]; ray_dir= [%f, %f, %f]\n", pix.x, pix.y, viewmatrix[0], viewmatrix[1], viewmatrix[2], viewmatrix[3], viewmatrix[4], viewmatrix[5], viewmatrix[6], viewmatrix[7], viewmatrix[8], viewmatrix[9], viewmatrix[10], viewmatrix[11], viewmatrix[12], viewmatrix[13], viewmatrix[14], viewmatrix[15], ray_dir.x, ray_dir.y, ray_dir.z);
+	// }
+
 	// Traverse all Gaussians
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
@@ -633,7 +638,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			Q_acc -= omega * ndc_m;
 			Q2Q_acc -= omega * ndc_m * ndc_m;
 
-			
 
 
 #ifdef Ld
@@ -654,11 +658,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// dm_dz = 2.0f / (far - near);
 
 			dL_dz = dL_dm * dm_dz;
-
-			// if (blockIdx.x == 30 && blockIdx.y == 50 && threadIdx.x == 8 && threadIdx.y == 8)
-			// {
-			// 	printf("back contributor= %d, dL_domega = %f, dL_dz = %f, dL_dopa = %f, omega = %f, z = %f, alpha = %f, T = %f, Ld = %f\n", contributor, dLd_domega, dL_dz, (T * (dLd_domega - accum_dLd_domega_rec)), omega, intersect_c.z, alpha, T, Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)));
-			// }
 
 			// dL/dp
 			// viewmatrix[2, 0], coloumn major
@@ -758,6 +757,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&dL_drot[global_id].y, dLn_dx);
 			atomicAdd(&dL_drot[global_id].z, dLn_dy);
 			atomicAdd(&dL_drot[global_id].w, dLn_dz);
+
+			// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 0 && threadIdx.y == 0)
+			// {
+			// 	printf("contrib= %d, alpha= %f, omega=%f, r= %f, x= %f, y= %f, z= %f, dL_dr= %f, dL_dx= %f, dL_dy= %f, dL_dz= %f, dL_dopa= %f, dep= %f\n", contributor, alpha, omega, r, x, y, z, dLn_dr, dLn_dx, dLn_dy, dLn_dz, (T * (dLn_domega - accum_dLn_domega_rec)), intersect_c.z);
+			// }
 			
 
 
