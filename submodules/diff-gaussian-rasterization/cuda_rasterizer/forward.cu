@@ -576,6 +576,13 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		out_normal[0 * H * W + pix_id] = normal_blend.x / P_acc;
 		out_normal[1 * H * W + pix_id] = normal_blend.y / P_acc;
 		out_normal[2 * H * W + pix_id] = normal_blend.z / P_acc;
+		float length = sqrt(out_normal[0 * H * W + pix_id] * out_normal[0 * H * W + pix_id] + out_normal[1 * H * W + pix_id] * out_normal[1 * H * W + pix_id] + out_normal[2 * H * W + pix_id] * out_normal[2 * H * W + pix_id]);
+		if (length > 0.0001f)
+		{
+			out_normal[0 * H * W + pix_id] /= length;
+			out_normal[1 * H * W + pix_id] /= length;
+			out_normal[2 * H * W + pix_id] /= length;
+		}
 		ray_P[pix_id] = P_acc;
 		ray_Q[pix_id] = Q_acc;
 		ray_Q2Q[pix_id] = Q2Q_acc;

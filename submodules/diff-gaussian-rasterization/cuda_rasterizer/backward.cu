@@ -547,10 +547,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			}
 
 			// Propagate gradients from pixel depth to opacity
-			// const float c_d = collected_depths[j];
-			// accum_depth_rec = last_alpha * last_depth + (1.f - last_alpha) * accum_depth_rec;
-			// last_depth = c_d;
-			// dL_dopa += (c_d - accum_depth_rec) * dL_dpixel_depth;
+			const float c_d = collected_depths[j];
+			accum_depth_rec = last_alpha * last_depth + (1.f - last_alpha) * accum_depth_rec;
+			last_depth = c_d;
+			dL_dopa += (c_d - accum_depth_rec) * dL_dpixel_depth;
 			// atomicAdd(&(dL_ddepths[global_id]), dpixel_depth_ddepth * dL_dpixel_depth);
 
 			// Propagate gradients from pixel alpha (weights_sum) to opacity
@@ -757,17 +757,17 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&dL_drot[global_id].w, dLn_dz);
 			
 #ifdef BlendingDepth
-				const float condition = true;
+				const bool condition = true;
 #else 
-				const float condition = contributor == depth_contrib[pix_id];
+				const bool condition = (contributor == depth_contrib[pix_id]);
 #endif
 			
 			if (condition) {
 
 #ifdef BlendingDepth
-				const float dL_ddepth = dL_dpixel_depths[pix_id] * dpixel_depth_ddepth;
+				const float dL_ddepth = dL_dpixel_depth * dpixel_depth_ddepth;
 #else 
-				const float dL_ddepth = dL_dpixel_depths[pix_id];
+				const float dL_ddepth = dL_dpixel_depth;
 #endif
 				// dL/dp
 				atomicAdd(&dL_dmeans3D[global_id].x, dL_ddepth * dz_dp0);
