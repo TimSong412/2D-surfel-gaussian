@@ -27,7 +27,7 @@ git clone git@github.com:TimSong412/2D-gaussian.git --recursive
 or
 ```shell
 # HTTPS
-git clone https://github.com/graphdeco-inria/gaussian-splatting --recursive
+git clone https://github.com/TimSong412/2D-gaussian.git --recursive
 ```
 
 ## Overview
