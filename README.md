@@ -8,8 +8,14 @@ This repository contains the unofficial implementation of the paper ["2D Gaussia
 This project is built upon [3DGS](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/).
 
 ## Overview
-![Image of the normal of LEGO bulldozer](https://github.com/TimSong412/2D-gaussian/blob/main/assets/kitchen-rgb.jpg?raw=true)
-![Image of the normal of LEGO bulldozer](https://github.com/TimSong412/2D-gaussian/blob/main/assets/kitchen-normal.jpg?raw=true)
+<p float="left">
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/kitchen-rgb.jpg?raw=true" width="100" />
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/kitchen-normal.jpg?raw=true" width="100" /> 
+</p>
+<p float="left">
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/garden-rgb.jpg?raw=true" width="100" />
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/garden-normal.jpg?raw=true" width="100" /> 
+</p>
 
 ## Cloning the Repository
 
@@ -48,7 +54,9 @@ sh download.sh
 ```
 
 **Set up environment**
+
 You can run the following in parallel with the previous step
+
 ```shell
 conda create -n gs python=3.8 
 conda activate gs
@@ -58,7 +66,9 @@ pip install -e submodules/diff-gaussian-rasterization
 ```
 
 **Compile Rasterizer**
+
 Build binary of cuda rasterier
+
 ```shell
 bash update_pkg.sh
 ```
@@ -158,6 +168,12 @@ Note that similar to MipNeRF360, we target images at resolutions in the 1-1.6K p
 The MipNeRF360 scenes are hosted by the paper authors [here](https://jonbarron.info/mipnerf360/). You can find our SfM data sets for Tanks&Temples and Deep Blending [here](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip). If you do not provide an output model directory (```-m```), trained models are written to folders with randomized unique names inside the ```output``` directory. At this point, the trained models may be viewed with the real-time viewer (see further below).
 
 ### Additional Visualization
+
+In additional to RGB images, the script will render depth map, normal map, and 3D gaussian visualization
+
+```shell
+python vis_depth.py
+```
 
 
 ### The Rest Are Identitcal To That of 3DGS
