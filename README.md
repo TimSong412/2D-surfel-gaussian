@@ -10,14 +10,14 @@ This project is built upon [3DGS](https://repo-sam.inria.fr/fungraph/3d-gaussian
 
 ## Overview
 <p float="left">
-  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/kitchen-rgb.jpg?raw=true" width="300" />
-  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/kitchen-normal.jpg?raw=true" width="300" /> 
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/kitchen-rgb.jpg?raw=true" width="350" />
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/kitchen-normal.jpg?raw=true" width="350" /> 
 </p>
 <p float="left">
-  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/garden-rgb.png?raw=true" width="300" />
-  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/garden-normal.png?raw=true" width="300" /> 
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/garden-rgb.png?raw=true" width="350" />
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/garden-normal.png?raw=true" width="350" /> 
 </p>
-
+Rendered RGB Image (left), Rendered Normal (right)
 ## Cloning the Repository
 
 The repository contains submodules, thus please check it out with 
