@@ -64,7 +64,7 @@ conda create -n gs python=3.8
 conda activate gs
 pip install -r requirements.txt
 pip install submodules/simple-knn
-pip install -e submodules/diff-gaussian-rasterization
+bash update_pkg.sh
 ```
 
 **Compile Rasterizer**
