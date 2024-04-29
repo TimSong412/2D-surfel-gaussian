@@ -44,19 +44,19 @@ The components have different requirements w.r.t. both hardware and software. Th
 
 The optimizer uses PyTorch and CUDA extensions in a Python environment to produce trained models. 
 
-### Hardware Requirements
+### Hardware Requirements 写AWS的配置
 
 - CUDA-ready GPU with Compute Capability 7.0+
 - 24 GB VRAM (to train to paper evaluation quality)
 - Please see FAQ for smaller VRAM configurations
 
-### Software Requirements
+### Software Requirements AWS配置
 - Conda (recommended for easy setup)
 - C++ Compiler for PyTorch extensions (we used Visual Studio 2019 for Windows)
 - CUDA SDK 11 for PyTorch extensions, install *after* Visual Studio (we used 11.8, **known issues with 11.6**)
 - C++ Compiler and CUDA SDK must be compatible
 
-### Setup
+### Setup 下载数据，conda create，pip install -r req.txt，安装simple-knn，最后update package
 
 #### Local Setup
 
@@ -87,6 +87,7 @@ Some users experience problems building the submodules on Windows (```cl.exe: Fi
 ### Running
 
 To run the optimizer, simply use
+加一个example
 
 ```shell
 python train.py -s <path to COLMAP or NeRF Synthetic dataset>
