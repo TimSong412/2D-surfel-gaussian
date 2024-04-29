@@ -609,57 +609,30 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			Q_acc -= omega * ndc_m;
 			Q2Q_acc -= omega * ndc_m * ndc_m;
 
-// Logical OR using macro
-#ifdef Ld
-	// dz/dp
-	// viewmatrix[2, 0], coloumn major
-	const float dz_dp0 = viewmatrix[2];
-	const float dz_dp1 = viewmatrix[6];
-	const float dz_dp2 = viewmatrix[10];
-	// dz/du dz/dv
-	const float dz_du = collected_STuv[j * 6 + 0] * viewmatrix[2] + collected_STuv[j * 6 + 1] * viewmatrix[6] + collected_STuv[j * 6 + 2] * viewmatrix[10];
-	const float	dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[2] + collected_STuv[j * 6 + 4] * viewmatrix[6] + collected_STuv[j * 6 + 5] * viewmatrix[10];
-	// dz/dtu dz/dtv
-	const float	dz_dtu0 = viewmatrix[2] * collected_scale[j].x * u;
-	const float	dz_dtu1 = viewmatrix[6] * collected_scale[j].x * u;
-	const float	dz_dtu2 = viewmatrix[10] * collected_scale[j].x * u;
-	const float	dz_dtv0 = viewmatrix[2] * collected_scale[j].y * v;
-	const float	dz_dtv1 = viewmatrix[6] * collected_scale[j].y * v;
-	const float	dz_dtv2 = viewmatrix[10] * collected_scale[j].y * v;
-	// dz/ds
-	float dz_dsu = (viewmatrix[2] * collected_STuv[j * 6 + 0] + viewmatrix[6] * collected_STuv[j * 6 + 1] + viewmatrix[10] * collected_STuv[j * 6 + 2]) * u / collected_scale[j].x; // ti =sti / s
-	float dz_dsv = (viewmatrix[2] * collected_STuv[j * 6 + 3] + viewmatrix[6] * collected_STuv[j * 6 + 4] + viewmatrix[10] * collected_STuv[j * 6 + 5]) * v / collected_scale[j].y;;
-	// for (int k = 0; k < 3; k++)
-	// {
-	// 	dz_dsu += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
-	// 	dz_dsv += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
-	// }
-#else
-#ifdef Ln
-	// dz/dp
-	// viewmatrix[2, 0], coloumn major
-	const float dz_dp0 = viewmatrix[2];
-	const float dz_dp1 = viewmatrix[6];
-	const float dz_dp2 = viewmatrix[10];
-	// dz/du dz/dv
-	const float dz_du = collected_STuv[j * 6 + 0] * viewmatrix[2] + collected_STuv[j * 6 + 1] * viewmatrix[6] + collected_STuv[j * 6 + 2] * viewmatrix[10];
-	const float	dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[2] + collected_STuv[j * 6 + 4] * viewmatrix[6] + collected_STuv[j * 6 + 5] * viewmatrix[10];
-	// dz/dtu dz/dtv
-	const float	dz_dtu0 = viewmatrix[2] * collected_scale[j].x * u;
-	const float	dz_dtu1 = viewmatrix[6] * collected_scale[j].x * u;
-	const float	dz_dtu2 = viewmatrix[10] * collected_scale[j].x * u;
-	const float	dz_dtv0 = viewmatrix[2] * collected_scale[j].y * v;
-	const float	dz_dtv1 = viewmatrix[6] * collected_scale[j].y * v;
-	const float	dz_dtv2 = viewmatrix[10] * collected_scale[j].y * v;
-	// dz/ds
-	float dz_dsu = (viewmatrix[2] * collected_STuv[j * 6 + 0] + viewmatrix[6] * collected_STuv[j * 6 + 1] + viewmatrix[10] * collected_STuv[j * 6 + 2]) * u / collected_scale[j].x; // ti =sti / s
-	float dz_dsv = (viewmatrix[2] * collected_STuv[j * 6 + 3] + viewmatrix[6] * collected_STuv[j * 6 + 4] + viewmatrix[10] * collected_STuv[j * 6 + 5]) * v / collected_scale[j].y;;
-	// for (int k = 0; k < 3; k++)
-	// {
-	// 	dz_dsu += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
-	// 	dz_dsv += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
-	// }
-#endif
+#ifdef LdOrLn
+		// dz/dp
+		// viewmatrix[2, 0], coloumn major
+		const float dz_dp0 = viewmatrix[2];
+		const float dz_dp1 = viewmatrix[6];
+		const float dz_dp2 = viewmatrix[10];
+		// dz/du dz/dv
+		const float dz_du = collected_STuv[j * 6 + 0] * viewmatrix[2] + collected_STuv[j * 6 + 1] * viewmatrix[6] + collected_STuv[j * 6 + 2] * viewmatrix[10];
+		const float	dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[2] + collected_STuv[j * 6 + 4] * viewmatrix[6] + collected_STuv[j * 6 + 5] * viewmatrix[10];
+		// dz/dtu dz/dtv
+		const float	dz_dtu0 = viewmatrix[2] * collected_scale[j].x * u;
+		const float	dz_dtu1 = viewmatrix[6] * collected_scale[j].x * u;
+		const float	dz_dtu2 = viewmatrix[10] * collected_scale[j].x * u;
+		const float	dz_dtv0 = viewmatrix[2] * collected_scale[j].y * v;
+		const float	dz_dtv1 = viewmatrix[6] * collected_scale[j].y * v;
+		const float	dz_dtv2 = viewmatrix[10] * collected_scale[j].y * v;
+		// dz/ds
+		float dz_dsu = (viewmatrix[2] * collected_STuv[j * 6 + 0] + viewmatrix[6] * collected_STuv[j * 6 + 1] + viewmatrix[10] * collected_STuv[j * 6 + 2]) * u / collected_scale[j].x; // ti =sti / s
+		float dz_dsv = (viewmatrix[2] * collected_STuv[j * 6 + 3] + viewmatrix[6] * collected_STuv[j * 6 + 4] + viewmatrix[10] * collected_STuv[j * 6 + 5]) * v / collected_scale[j].y;;
+		// for (int k = 0; k < 3; k++)
+		// {
+		// 	dz_dsu += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
+		// 	dz_dsv += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
+		// }
 #endif
 
 #ifdef Ld
