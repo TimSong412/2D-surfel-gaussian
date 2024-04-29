@@ -163,7 +163,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # torchvision.utils.save_image(nandepth/10.0, f"depth_{iteration:05d}.png")
         if torch.isnan(Ln):
             print("Nan Loss")
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.1 * Ln
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.05 * Ln
         loss.backward()
 
         # gradient clipping

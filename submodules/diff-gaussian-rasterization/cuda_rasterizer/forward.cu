@@ -333,10 +333,7 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	conic_opacity[idx] = {conic.x, conic.y, conic.z, opacities[idx]};
 	tiles_touched[idx] = (rect_max.y - rect_min.y) * (rect_max.x - rect_min.x);
 	normals[idx] = normal;
-	if (glm::abs((normal.x * normal.x + normal.y * normal.y + normal.z * normal.z) - 1) > 0.0001f)
-	{
-		printf("normal not normalized\n");
-	}
+
 }
 
 // Main rasterization method. Collaboratively works on one tile per
@@ -516,7 +513,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			if (T >= 0.5f)
 			{
 				D = intersect_c.z;
-				depth_contributor = last_contributor; // TODO: may be last_contributor, to match the backward 
+				depth_contributor = last_contributor; // last_contributor, to match the backward 
+				
 				
 				if (glm::abs(collected_normal[j].x * collected_normal[j].x + collected_normal[j].y * collected_normal[j].y + collected_normal[j].z * collected_normal[j].z - 1) > 0.0001f)
 				{
@@ -576,6 +574,13 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		out_normal[0 * H * W + pix_id] = normal_blend.x / P_acc;
 		out_normal[1 * H * W + pix_id] = normal_blend.y / P_acc;
 		out_normal[2 * H * W + pix_id] = normal_blend.z / P_acc;
+		const float length = sqrt(out_normal[0 * H * W + pix_id] * out_normal[0 * H * W + pix_id] + out_normal[1 * H * W + pix_id] * out_normal[1 * H * W + pix_id] + out_normal[2 * H * W + pix_id] * out_normal[2 * H * W + pix_id]);
+		if (length > 0.0001f)
+		{
+			out_normal[0 * H * W + pix_id] /= length;
+			out_normal[1 * H * W + pix_id] /= length;
+			out_normal[2 * H * W + pix_id] /= length;
+		}
 		ray_P[pix_id] = P_acc;
 		ray_Q[pix_id] = Q_acc;
 		ray_Q2Q[pix_id] = Q2Q_acc;
