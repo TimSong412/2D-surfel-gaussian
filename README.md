@@ -71,6 +71,19 @@ pip install submodules/simple-knn
 bash update_pkg.sh
 ```
 
+**Configuration**
+
+Checkout [Config.h](https://github.com/TimSong412/2D-surfel-gaussian/blob/main/submodules/diff-gaussian-rasterization/cuda_rasterizer/config.h) for options of regularization.
+
+```c
+#define Ld
+```
+and 
+```c
+#define Ln
+```
+turn on and off depth distortion (Ld) regularizer and normal consistency regularizer (Ln). `Wd` is the weight of depth distortion (Ld) loss. `Wn` is actually redundent, and the weight should be adjusted in train.py
+
 **Compile Rasterizer**
 
 Build binary of cuda rasterier
