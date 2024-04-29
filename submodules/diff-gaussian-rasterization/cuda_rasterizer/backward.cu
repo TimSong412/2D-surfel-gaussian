@@ -296,8 +296,7 @@ __global__ void preprocessCUDA(
 		computeColorFromSH(idx, D, M, (glm::vec3 *)means, *campos, shs, clamped, (glm::vec3 *)dL_dcolor, (glm::vec3 *)dL_dmeans, (glm::vec3 *)dL_dsh);
 
 	// Compute gradient updates due to computing covariance from scale/rotation
-	if (scales)
-		computeASTuv(scales[idx], scale_modifier, rotations[idx], m, view, dL_dA + idx * 9, dL_dmeans + idx, dL_dscale + idx, dL_drot + idx);
+	computeASTuv(scales[idx], scale_modifier, rotations[idx], m, view, dL_dA + idx * 9, dL_dmeans + idx, dL_dscale + idx, dL_drot + idx);
 }
 
 // Backward version of the rendering procedure.
