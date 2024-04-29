@@ -8,15 +8,6 @@ This repository contains the unofficial implementation of the paper ["2D Gaussia
 This project is built upon [3DGS](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/).
 
 
-
-## Step-by-step Tutorial
-
-Jonathan Stephens made a fantastic step-by-step tutorial for setting up Gaussian Splatting on your machine, along with instructions for creating usable datasets from videos. If the instructions below are too dry for you, go ahead and check it out [here](https://www.youtube.com/watch?v=UXtuigy_wYc).
-
-## Colab
-
-User [camenduru](https://github.com/camenduru) was kind enough to provide a Colab template that uses this repo's source (status: August 2023!) for quick and easy access to the method. Please check it out [here](https://github.com/camenduru/gaussian-splatting-colab).
-
 ## Cloning the Repository
 
 The repository contains submodules, thus please check it out with 
@@ -29,16 +20,6 @@ or
 # HTTPS
 git clone https://github.com/TimSong412/2D-gaussian.git --recursive
 ```
-
-## Overview
-
-The codebase has 4 main components:
-- A PyTorch-based optimizer to produce a 3D Gaussian model from SfM inputs
-- A network viewer that allows to connect to and visualize the optimization process
-- An OpenGL-based real-time viewer to render trained models in real-time.
-- A script to help you turn your own images into optimization-ready SfM data sets
-
-The components have different requirements w.r.t. both hardware and software. They have been tested on Windows 10 and Ubuntu Linux 22.04. Instructions for setting up and running each of them are found in the sections below.
 
 ## Optimizer
 
