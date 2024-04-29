@@ -174,11 +174,11 @@ The MipNeRF360 scenes are hosted by the paper authors [here](https://jonbarron.i
 In additional to RGB images, the script will render depth map, normal map, and 3D gaussian visualization
 
 ```shell
-python vis_depth.py
+python vis_depth.py -m output/xxxxx --eval
 ```
 
 
-### The Rest Are Identitcal To That of 3DGS
+### *The Rest Are Identitcal To That of 3DGS*
 
 ### Evaluation
 By default, the trained models use all available images in the dataset. To train them while withholding a test set for evaluation, use the ```--eval``` flag. This way, you can render training/test sets and produce error metrics as follows:
