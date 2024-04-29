@@ -9,12 +9,12 @@ This project is built upon [3DGS](https://repo-sam.inria.fr/fungraph/3d-gaussian
 
 ## Overview
 <p float="left">
-  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/kitchen-rgb.jpg?raw=true" width="500" />
-  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/kitchen-normal.jpg?raw=true" width="500" /> 
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/kitchen-rgb.jpg?raw=true" width="300" />
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/kitchen-normal.jpg?raw=true" width="300" /> 
 </p>
 <p float="left">
-  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/garden-rgb.png?raw=true" width="500" />
-  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/garden-normal.png?raw=true" width="500" /> 
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/garden-rgb.png?raw=true" width="300" />
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/garden-normal.png?raw=true" width="300" /> 
 </p>
 
 ## Cloning the Repository
@@ -34,13 +34,13 @@ git clone https://github.com/TimSong412/2D-gaussian.git --recursive
 
 The optimizer uses PyTorch and CUDA extensions in a Python environment to produce trained models. 
 
-### Hardware Requirements 写AWS的配置
+### Hardware Requirements 
 
 - CUDA-ready GPU with Compute Capability 8.6+
 - 24 GB VRAM (to train to paper evaluation quality)
 - Please see FAQ for smaller VRAM configurations
 
-### Software Requirements AWS配置
+### Software Requirements 
 - Conda (recommended for easy setup)
 - C++ Compiler for PyTorch extensions 
 - CUDA SDK 12 for PyTorch extensions, install *after* Visual Studio (we used 12.1)
