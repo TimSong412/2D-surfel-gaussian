@@ -6,7 +6,7 @@ GRASP lab, University of Pennsylvania
 This repository contains the unofficial implementation of the paper ["2D Gaussian Splatting for Geometrically Accurate Radiance Fields"](https://arxiv.org/pdf/2403.17888).
 The detailed equations of our method are [here](https://cubic-keeper-3fa.notion.site/Release-Specification-7e01961c464040e583791b3654523127?pvs=4).
 
-We are eager to receive suggestions and open to feedback and criticism!
+Our implementation is as perfect in photometric reconstruction as that of 3D gs. We are eager to receive suggestions and open to feedback and criticism!
 
 
 ## Acknowledgements
