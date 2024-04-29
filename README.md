@@ -178,7 +178,7 @@ python vis_depth.py -m output/xxxxx --eval
 ```
 
 
-### *The Rest Are Identitcal To That of 3DGS*
+### *-----The Rest Are Identitcal To That Of 3DGS-----*
 
 ### Evaluation
 By default, the trained models use all available images in the dataset. To train them while withholding a test set for evaluation, use the ```--eval``` flag. This way, you can render training/test sets and produce error metrics as follows:
