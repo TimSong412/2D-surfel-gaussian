@@ -674,6 +674,17 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dm_dz = 2 * far * near / ((far - near) * intersect_c.z * intersect_c.z);
 			dL_dz = dL_dm * dm_dz;
 
+			// if (blockIdx.x == 30 && blockIdx.y == 50 && threadIdx.x == 8 && threadIdx.y == 8)
+			// {
+			// 	printf("back contributor= %d, dL_domega = %f, dL_dz = %f, dL_dopa = %f, omega = %f, z = %f, alpha = %f, T = %f, Ld = %f\n", contributor, dLd_domega, dL_dz, (T * (dLd_domega - accum_dLd_domega_rec)), omega, intersect_c.z, alpha, T, Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)));
+			// }
+
+			// dL/dp
+			// viewmatrix[2, 0], coloumn major
+			const float dz_dp0 = viewmatrix[2];
+			const float dz_dp1 = viewmatrix[6];
+			const float dz_dp2 = viewmatrix[10];
+
 			atomicAdd(&dL_dmeans3D[global_id].x, dL_dz * dz_dp0);
 			atomicAdd(&dL_dmeans3D[global_id].y, dL_dz * dz_dp1);
 			atomicAdd(&dL_dmeans3D[global_id].z, dL_dz * dz_dp2);
@@ -755,6 +766,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&dL_drot[global_id].y, dLn_dx);
 			atomicAdd(&dL_drot[global_id].z, dLn_dy);
 			atomicAdd(&dL_drot[global_id].w, dLn_dz);
+
+			// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 0 && threadIdx.y == 0)
+			// {
+			// 	printf("contrib= %d, alpha= %f, omega=%f, r= %f, x= %f, y= %f, z= %f, dL_dr= %f, dL_dx= %f, dL_dy= %f, dL_dz= %f, dL_dopa= %f, dep= %f\n", contributor, alpha, omega, r, x, y, z, dLn_dr, dLn_dx, dLn_dy, dLn_dz, (T * (dLn_domega - accum_dLn_domega_rec)), intersect_c.z);
+			// }
 			
 
 
