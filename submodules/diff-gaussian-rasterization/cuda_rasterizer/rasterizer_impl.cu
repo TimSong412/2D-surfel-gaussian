@@ -88,6 +88,7 @@ __global__ void duplicateWithKeys(
 		uint32_t off = (idx == 0) ? 0 : offsets[idx - 1];
 		uint2 rect_min, rect_max;
 
+		// rect: tile index bounding box
 		getRect(points_xy[idx], radii[idx], rect_min, rect_max, grid);
 
 		// For each tile that the bounding rect overlaps, emit a
@@ -166,6 +167,10 @@ CudaRasterizer::GeometryState CudaRasterizer::GeometryState::fromChunk(char *&ch
 	cub::DeviceScan::InclusiveSum(nullptr, geom.scan_size, geom.tiles_touched, geom.tiles_touched, P);
 	obtain(chunk, geom.scanning_space, geom.scan_size, 128);
 	obtain(chunk, geom.point_offsets, P, 128);
+
+	obtain(chunk, geom.STuv, P * 6, 128);
+	obtain(chunk, geom.A, P * 9, 128);
+	obtain(chunk, geom.normal, P, 128);
 	return geom;
 }
 
@@ -174,6 +179,13 @@ CudaRasterizer::ImageState CudaRasterizer::ImageState::fromChunk(char *&chunk, s
 	ImageState img;
 	obtain(chunk, img.n_contrib, N, 128);
 	obtain(chunk, img.ranges, N, 128);
+	obtain(chunk, img.ray_Q, N, 128);
+	obtain(chunk, img.ray_P, N, 128);
+	obtain(chunk, img.ray_Q2Q, N, 128);
+	obtain(chunk, img.ray_M, N * 3, 128);
+
+	obtain(chunk, img.depth_contrib, N, 128);
+
 	return img;
 }
 
@@ -189,6 +201,7 @@ CudaRasterizer::BinningState CudaRasterizer::BinningState::fromChunk(char *&chun
 		binning.point_list_keys_unsorted, binning.point_list_keys,
 		binning.point_list_unsorted, binning.point_list, P);
 	obtain(chunk, binning.list_sorting_space, binning.sorting_size, 128);
+
 	return binning;
 }
 
@@ -217,6 +230,9 @@ int CudaRasterizer::Rasterizer::forward(
 	float *out_color,
 	float *out_depth,
 	float *out_alpha,
+	float *out_normal,
+	float *out_P,
+	float *out_M,
 	int *radii,
 	bool debug)
 {
@@ -266,6 +282,9 @@ int CudaRasterizer::Rasterizer::forward(
 				   geomState.means2D,
 				   geomState.depths,
 				   geomState.cov3D,
+				   geomState.STuv,
+				   geomState.A,
+				   geomState.normal,
 				   geomState.rgb,
 				   geomState.conic_opacity,
 				   tile_grid,
@@ -325,17 +344,32 @@ int CudaRasterizer::Rasterizer::forward(
 				   tile_grid, block,
 				   imgState.ranges,
 				   binningState.point_list,
+				   means3D,
+				   viewmatrix,
 				   width, height,
+				   focal_x, focal_y,
 				   geomState.means2D,
 				   feature_ptr,
 				   geomState.depths,
 				   geomState.conic_opacity,
+				   geomState.STuv,
+				   geomState.A,
+				   geomState.normal,
 				   out_alpha,
 				   imgState.n_contrib,
+				   imgState.depth_contrib,
 				   background,
 				   out_color,
-				   out_depth),
+				   out_depth,
+				   out_normal,
+				   imgState.ray_P,
+				   imgState.ray_Q,
+				   imgState.ray_Q2Q,
+				   imgState.ray_M),
 			   debug);
+
+	CHECK_CUDA(cudaMemcpy(out_P, imgState.ray_P, width * height * sizeof(float), cudaMemcpyDeviceToDevice), debug);
+	CHECK_CUDA(cudaMemcpy(out_M, imgState.ray_M, width * height * sizeof(float)*3, cudaMemcpyDeviceToDevice), debug);
 
 	return num_rendered;
 }
@@ -365,6 +399,9 @@ void CudaRasterizer::Rasterizer::backward(
 	const float *dL_dpix,
 	const float *dL_dpix_depth,
 	const float *dL_dalphas,
+	const float* dL_dnormals,
+	const float* dL_dP,
+	const float* dL_dM,
 	float *dL_dmean2D,
 	float *dL_dconic,
 	float *dL_dopacity,
@@ -375,7 +412,10 @@ void CudaRasterizer::Rasterizer::backward(
 	float *dL_dsh,
 	float *dL_dscale,
 	float *dL_drot,
-	bool debug)
+	float *dL_dA,
+	float *dL_dc_margin,
+	bool debug,
+	float *Ld_value)
 {
 	GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
 	BinningState binningState = BinningState::fromChunk(binning_buffer, R);
@@ -402,22 +442,43 @@ void CudaRasterizer::Rasterizer::backward(
 				   block,
 				   imgState.ranges,
 				   binningState.point_list,
+				   means3D,
+				   viewmatrix,
 				   width, height,
+				   focal_x, focal_y,
 				   background,
 				   geomState.means2D,
 				   geomState.conic_opacity,
 				   color_ptr,
 				   depth_ptr,
 				   alphas,
+				   geomState.STuv,
+				   (glm::vec3 *)scales,
+				   (glm::vec4 *)rotations,
+				   geomState.A,
+				   geomState.normal,
+				   imgState.ray_P,
+				   imgState.ray_Q,
+				   imgState.ray_Q2Q,
 				   imgState.n_contrib,
+				   imgState.depth_contrib,
 				   dL_dpix,
 				   dL_dpix_depth,
 				   dL_dalphas,
+				   dL_dnormals,
+				   dL_dP,
+				   dL_dM,
 				   (float3 *)dL_dmean2D,
 				   (float4 *)dL_dconic,
 				   dL_dopacity,
 				   dL_dcolor,
-				   dL_ddepth),
+				   dL_ddepth,
+				   dL_dA,
+				   (float2 *)dL_dc_margin,
+				   (glm::vec3 *)dL_dmean3D,
+				   (glm::vec3 *)dL_dscale,
+				   (glm::vec4 *)dL_drot,
+				   Ld_value),
 			   debug)
 
 	// Take care of the rest of preprocessing. Was the precomputed covariance
@@ -438,6 +499,8 @@ void CudaRasterizer::Rasterizer::backward(
 									focal_x, focal_y,
 									tan_fovx, tan_fovy,
 									(glm::vec3 *)campos,
+									dL_dA,
+									(float2 *)dL_dc_margin,
 									(float3 *)dL_dmean2D,
 									dL_dconic,
 									(glm::vec3 *)dL_dmean3D,

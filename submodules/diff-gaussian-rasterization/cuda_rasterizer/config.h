@@ -16,4 +16,12 @@
 #define BLOCK_X 16
 #define BLOCK_Y 16
 
+#define Ld
+#define Wd 100.0f
+#define far 1000.0f
+#define near 0.2f
+
+#define Ln
+#define Wn 0.05f
+
 #endif

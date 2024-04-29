@@ -13,6 +13,9 @@ import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
 from math import exp
+from torchmetrics.functional.image import image_gradients
+from .graphics_utils import fov2focal
+import numpy as np
 
 def l1_loss(network_output, gt):
     return torch.abs((network_output - gt)).mean()
@@ -61,4 +64,25 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True):
         return ssim_map.mean()
     else:
         return ssim_map.mean(1).mean(1).mean(1)
+    
+def norm_loss(P, M, depth, fx, fy, W, H):
+    cx=W/2.0
+    cy=H/2.0
+
+    x=torch.arange(W).reshape(1, -1).repeat(H, 1).to(depth.device)
+    y=torch.arange(H).reshape(-1, 1).repeat(1, W).to(depth.device)
+    x=(x-cx)/fx
+    y=(y-cy)/fy
+    view_ray = torch.stack([x, y, torch.ones_like(x)]).to(depth.device)
+    view_ray = view_ray / torch.norm(view_ray, dim=0, keepdim=True)
+    
+    xyz = torch.stack([x*depth.squeeze(), y*depth.squeeze(), depth.squeeze()])
+    _, dPy, dPx = torch.gradient(xyz)
+    normal = torch.cross(dPx, dPy, dim=0)
+    normal = normal / torch.norm(normal, dim=0, keepdim=True)
+    angle = torch.sum(normal * view_ray, dim=0)
+    normal[:, angle > 0] *= -1.0
+
+    
+    return (P - (M * normal).sum(dim=0, keepdim=True)).mean(), normal, (P - (M * normal).sum(dim=0, keepdim=True))/2.0
 
