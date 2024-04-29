@@ -7,6 +7,8 @@ This repository contains the unofficial implementation of the paper ["2D Gaussia
 ## Acknowledgements
 This project is built upon [3DGS](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/).
 
+## Overview
+放几张效果图
 
 ## Cloning the Repository
 
