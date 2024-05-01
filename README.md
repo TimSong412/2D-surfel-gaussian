@@ -6,7 +6,7 @@ GRASP lab, University of Pennsylvania
 This repository contains the unofficial implementation of the paper ["2D Gaussian Splatting for Geometrically Accurate Radiance Fields"](https://arxiv.org/pdf/2403.17888).
 The detailed equations of our method are [here](https://cubic-keeper-3fa.notion.site/Release-Specification-7e01961c464040e583791b3654523127?pvs=4).
 
-We are eager to receive suggestions and open to feedback and criticism!
+Our implementation is as perfect in photometric reconstruction as that of 3D gs. We are eager to receive suggestions and open to feedback and criticism!
 
 
 ## Acknowledgements
@@ -70,6 +70,19 @@ pip install -r requirements.txt
 pip install submodules/simple-knn
 bash update_pkg.sh
 ```
+
+**Configuration**
+
+Checkout [Config.h](https://github.com/TimSong412/2D-surfel-gaussian/blob/main/submodules/diff-gaussian-rasterization/cuda_rasterizer/config.h) for options of regularization.
+
+```c
+#define Ld
+```
+and 
+```c
+#define Ln
+```
+turn on and off depth distortion (Ld) regularizer and normal consistency regularizer (Ln). `Wd` is the weight of depth distortion (Ld) loss. `Wn` is actually redundent, and the weight should be adjusted in train.py
 
 **Compile Rasterizer**
 
