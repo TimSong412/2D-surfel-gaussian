@@ -24,12 +24,9 @@ from arguments import ModelParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel
 from utils.graphics_utils import fov2focal,getWorld2View
 
-def render_set(model_path, name, iteration, views, gaussians, pipeline,
-               background):
-    render_path = os.path.join(model_path, name, "ours_{}".format(iteration),
-                               "renders")
-    gts_path = os.path.join(model_path, name, "ours_{}".format(iteration),
-                            "gt")
+def render_set(model_path, name, iteration, views, gaussians, pipeline, background):
+    render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
+    gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
 
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
@@ -38,25 +35,25 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline,
     poses = []
     K = torch.zeros(4, 4)
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
-        # if idx == 20:
-        #     break
         render_pkg = render(view, gaussians, pipeline, background)
         rendering = render_pkg["render"]
         colors.append(rendering)
         depths.append(render_pkg["depth"])
         pose=getWorld2View(view.R, view.T)
         poses.append(pose) 
-        K = visualize_pc(render_pkg, view, idx)
+        K = get_K(render_pkg, view, idx)
+        # K = visualize_pc(render_pkg, view, idx)
         gt = view.original_image[0:3, :, :]
         torchvision.utils.save_image(
             rendering, os.path.join(render_path,
                                     '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(
             gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
-    torch.save(depths, 'test/data/depths.pt')
-    torch.save(colors, 'test/data/colors.pt')
-    torch.save(poses, 'test/data/poses.pt')
-    torch.save(K, 'test/data/K.pt')
+    name="2"
+    torch.save(depths, f'test_new/{name}/data/depths.pt')
+    torch.save(colors, f'test_new/{name}/data/colors.pt')
+    torch.save(poses, f'test_new/{name}/data/poses.pt')
+    torch.save(K, f'test_new/{name}/data/K.pt')
     mesh_extraction(depths, colors, K, poses)
 
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool):
@@ -71,6 +68,30 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
 
         if not skip_test:
             render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background)
+
+def get_K(render_pkg,view,idx):
+    '''
+    Input:
+    rendering_pkg: dict
+        rendering_pkg["render"]: torch.Tensor, shape (3, H, W)
+        rendering_pkg["depth"]: torch.Tensor, shape (1, H, W)
+    view: Camera object
+    idx: int
+
+    return: torch.Tensor, shape (4, 4)
+    '''
+    rendering = render_pkg["render"]
+    depth= render_pkg["depth"]
+    scale=view.scale
+    H,W=rendering.shape[1:]
+    # camera intrinsic
+    fx=fov2focal(view.FoVx, W)
+    fy=fov2focal(view.FoVy, H)
+    cx=W/2
+    cy=H/2
+    K=torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
+    return K
+
 
 def visualize_pc(render_pkg,view,idx):
     # def visualize(idx=0):
@@ -121,7 +142,7 @@ def visualize_pc(render_pkg,view,idx):
     colors = rendering.permute(1, 2, 0).reshape(-1, 3).cpu().numpy()
     colors_clip=np.clip(colors, 0.0, 1.0)
     pcd.colors = o3d.utility.Vector3dVector(colors_clip)
-    o3d.io.write_point_cloud(f"test/point_cloud_result/pc_{idx}.ply", pcd)
+    o3d.io.write_point_cloud(f"test/point_cloud_result/3-Ld/pc_{idx}.ply", pcd)
     return K
 
 def mesh_extraction(depths, colors, K, RTs):
@@ -136,19 +157,18 @@ def mesh_extraction(depths, colors, K, RTs):
 
     """
     # Voxel size used in TSDF fusion.
-    voxel_length = 0.004
+    voxel_length = 0.006
     # Truncation threshold for TSDF.
-    sdf_trunc = 0.02
+    sdf_trunc = 0.05
+    depth_trunc = 5.5
     # Initialize a TSDF volume
     tsdf_volume = o3d.pipelines.integration.ScalableTSDFVolume(
         voxel_length=voxel_length,
         sdf_trunc=sdf_trunc,
-        color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8)
+        color_type=o3d.pipelines.integration.TSDFVolumeColorType.NoColor)
     H,W = depths[0].shape[1:]
-    img_num=len(depths)
-    idx=np.arange(0, 190, 5)
     # Process each depth image
-    for i in idx:
+    for i in range(len(depths)):
         depth = depths[i]
         RT = RTs[i]
         color = colors[i]
@@ -164,6 +184,7 @@ def mesh_extraction(depths, colors, K, RTs):
             color_o3d,
             depth_o3d,
             depth_scale=1.0,
+            depth_trunc=depth_trunc,
             convert_rgb_to_intensity=False)
         # Create a camera intrinsic object
         intrinsic_o3d = o3d.camera.PinholeCameraIntrinsic()
@@ -176,19 +197,48 @@ def mesh_extraction(depths, colors, K, RTs):
     mesh = tsdf_volume.extract_triangle_mesh()
     # Compute vertex normals to improve rendering
     mesh.compute_vertex_normals()
+    # mesh_simplfied = mesh.simplify_quadric_decimation(target_number_of_triangles =65345254//10)
+    # print(f'Simplified mesh has {len(mesh_simplfied.vertices)} vertices and {len(mesh_simplfied.triangles)} triangles')
+    # mesh_simplfied = mesh.simplify_quadric_decimation(target_number_of_triangles =65345254//2)
+    # print(f'Simplified mesh has {len(mesh_simplfied.vertices)} vertices and {len(mesh_simplfied.triangles)} triangles')
+    print(f'Original mesh has {len(mesh.vertices)} vertices and {len(mesh.triangles)} trianglpes')
+
+    mesh_simplfied = mesh.simplify_quadric_decimation(target_number_of_triangles =42715716//20)
+    # print(f'Simplified mesh has {len(mesh_simplfied.vertices)} vertices and {len(mesh_simplfied.triangles)} triangles')
     # Save the mesh to a file
-    o3d.io.write_triangle_mesh(f"test/mesh_result/mesh_{img_num}.ply", mesh)
+    name="2"
+    o3d.io.write_triangle_mesh(f"test_new/{name}/mesh_result/mesh_voxel_{voxel_length}_sdf_trunc_{sdf_trunc}_dpepth_trunc_{depth_trunc}.ply", mesh_simplfied, write_ascii=False, write_vertex_colors=False)
     pass
 
 
+def simplify_mesh(file_name, mesh, n):
+    """
+    Simplifies a mesh using quadric edge collapse decimation.
+    
+    Parameters:
+    - mesh: The input mesh.
+    - target_reduction: The target reduction factor.
+    
+    Returns:
+    - The simplified mesh.
+    """
+    simplified_mesh = mesh.simplify_quadric_decimation(target_number_of_triangles=n)
+    o3d.io.write_triangle_mesh(f"{file_name}simplified", simplified_mesh, write_ascii=False, write_vertex_colors=False)
+
+    return simplify_mesh
+
 if __name__ == "__main__":
+    # file_name="test_new/mesh_result/2-without-Ld/mesh_voxel_0.004_sdf_trunc_0.02_dpepth_trunc_6.ply"
+    # mesh = o3d.io.read_triangle_mesh(file_name)
+    # mesh=simplify_mesh(file_name,mesh,n=65345254//5)
     load=True
     if load:
         # visualize()
-        depths=torch.load('test/data/depths.pt')
-        poses=torch.load('test/data/poses.pt')
-        colors=torch.load('test/data/colors.pt')
-        K=torch.load('test/data/K.pt')
+        name="2"
+        depths=torch.load(f'test_new/{name}/data/depths.pt')
+        poses=torch.load(f'test_new/{name}/data/poses.pt')
+        colors=torch.load(f'test_new/{name}/data/colors.pt')
+        K=torch.load(f'test_new/{name}/data/K.pt')
         mesh_extraction(depths, colors,K, poses)
     else:
         # Set up command line argument parser
