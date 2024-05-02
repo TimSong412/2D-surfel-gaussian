@@ -8,6 +8,10 @@ The detailed equations of our method are [here](https://cubic-keeper-3fa.notion.
 
 Our implementation is as perfect in photometric reconstruction as that of 3D gs. We are eager to receive suggestions and open to feedback and criticism!
 
+We are still debugging!
+
+240502: Fix negative ray_M gradient.
+
 
 ## Acknowledgements
 This project is built upon [3DGS](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/).
