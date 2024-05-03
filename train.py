@@ -13,7 +13,7 @@ import os
 import time
 import torch
 from random import randint
-from utils.loss_utils import l1_loss, ssim, norm_loss, normal_loss_2DGS
+from utils.loss_utils import l1_loss, ssim, norm_loss, normal_loss_2DGS, get_edge_map
 from gaussian_renderer import render, network_gui
 import sys
 from scene import Scene, GaussianModel
@@ -141,8 +141,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             pipe.debug = True
 
         bg = torch.rand((3), device="cuda") if opt.random_background else background
+        gt_image = viewpoint_cam.original_image.cuda()
 
-        render_pkg = render(viewpoint_cam, gaussians, pipe, bg, Ld_value=Ld_value)
+        gt_exp_neg_grad = get_edge_map(gt_image)
+
+        render_pkg = render(viewpoint_cam, gaussians, pipe, bg, Ld_value=Ld_value, gt_exp_neg_grad=gt_exp_neg_grad)
         image, viewspace_point_tensor, visibility_filter, radii, depth, ray_P, ray_M, blend_normal = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["depth"], render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["normal"]
         ray_P.retain_grad()
         ray_M.retain_grad()
@@ -150,12 +153,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # if (ray_P == 0.0).sum() > 0:
         #     print("Zero ray_P")
         # Loss
-        gt_image = viewpoint_cam.original_image.cuda()
+        
         Ll1 = l1_loss(image, gt_image)
         newdepth = torch.clamp(depth, 0.1)
         newdepth.retain_grad()
-        fx = fov2focal(viewpoint_cam.FoVx, viewpoint_cam.image_width)
-        fy = fov2focal(viewpoint_cam.FoVy, viewpoint_cam.image_height)
         # Ln, depth_norm, loss_map = norm_loss(ray_P, ray_M, newdepth, fx, fy, viewpoint_cam.image_width, viewpoint_cam.image_height)
         Ln, depth_norm, loss_map = normal_loss_2DGS(ray_P, ray_M, newdepth, viewpoint_cam)
         # torchvision.utils.save_image(image, f"image_{iteration:05d}.png")

@@ -308,6 +308,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const float *__restrict__ orig_points,
 		const float *viewmatrix,
 		int W, int H,
+		const float *__restrict__ gt_exp_neg_grad,
 		const float focal_x, const float focal_y,
 		const float *__restrict__ bg_color,
 		const float2 *__restrict__ points_xy_image,
@@ -425,6 +426,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	float last_dLd_domega = 0;
 
 	float last_dLn_domega = 0;
+
+	printf("backwards");
 
 	float omega = 0;
 	float ndc_m = 0;
@@ -635,14 +638,15 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 #endif
 
 #ifdef Ld
-			const float dLd_domega = Wd * (ndc_m * ndc_m * P_start + Q2Q_start - 2 * ndc_m * Q_start) / (W * H);
+			const float edge_normalization_weight = gt_exp_neg_grad[pix_id];
+			const float dLd_domega = Wd * (ndc_m * ndc_m * P_start + Q2Q_start - 2 * ndc_m * Q_start) / (W * H) * edge_normalization_weight;
 
 			dL_dopa += (T * (dLd_domega - accum_dLd_domega_rec));
 			last_dLd_domega = dLd_domega;
-			thread_Ld += Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)) / (W * H);
+			thread_Ld += Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)) / (W * H) * edge_normalization_weight;
 
 			// dL/dm
-			const float dL_dm = Wd * 2 * omega * (ndc_m * P_start - Q_start) / (W * H);
+			const float dL_dm = Wd * 2 * omega * (ndc_m * P_start - Q_start) / (W * H) * edge_normalization_weight;
 			dm_dz = 2 * far * near / ((far - near) * intersect_c.z * intersect_c.z);
 			dL_dz = dL_dm * dm_dz;
 
@@ -901,6 +905,7 @@ void BACKWARD::render(
 	const float *orig_points,
 	const float *viewmatrix,
 	int W, int H,
+	const float *gt_exp_neg_grad,
 	const float focal_x, const float focal_y,
 	const float *bg_color,
 	const float2 *means2D,
@@ -945,6 +950,7 @@ void BACKWARD::render(
 		orig_points,
 		viewmatrix,
 		W, H,
+		gt_exp_neg_grad,
 		focal_x, focal_y,
 		bg_color,
 		means2D,

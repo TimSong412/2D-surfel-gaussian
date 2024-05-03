@@ -347,6 +347,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const float *__restrict__ orig_points,
 		const float *viewmatrix,
 		int W, int H,
+		const float *__restrict__ gt_exp_neg_grad,
 		const float focal_x,
 		const float focal_y,
 		const float2 *__restrict__ points_xy_image,
@@ -507,11 +508,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// Eq. (3) from 3D Gaussian splatting paper.
 			for (int ch = 0; ch < CHANNELS; ch++)
 				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
-#ifdef BlendingDepth
-			D += intersect_c.z * alpha * T;
-#else
-			weight += alpha * T;
 
+			
 			float3 normal_i = collected_normal[j];
 			// all normals are toward the camera
 			if ((normal_i.x * ray_dir.x + normal_i.y * ray_dir.y + normal_i.z * ray_dir.z) > 0)
@@ -520,6 +518,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				normal_i.y = -normal_i.y;
 				normal_i.z = -normal_i.z;
 			}
+
+#ifdef BlendingDepth
+			D += intersect_c.z * alpha * T;
+#else
 
 			if (T >= 0.5f)
 			{
@@ -610,6 +612,7 @@ void FORWARD::render(
 	const float *orig_points,
 	const float *viewmatrix,
 	int W, int H,
+	const float *gt_exp_neg_grad,
 	const float focal_x,
 	const float focal_y,
 	const float2 *means2D,
@@ -637,6 +640,7 @@ void FORWARD::render(
 		orig_points,
 		viewmatrix,
 		W, H,
+		gt_exp_neg_grad,
 		focal_x,
 		focal_y,
 		means2D,

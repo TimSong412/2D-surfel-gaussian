@@ -27,6 +27,7 @@ namespace BACKWARD
 		const float *orig_points,
 		const float *viewmatrix,
 		int W, int H,
+		const float *gt_exp_neg_grad,
 		const float focal_x, const float focal_y,
 		const float *bg_color,
 		const float2 *means2D,
