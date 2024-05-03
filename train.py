@@ -13,7 +13,7 @@ import os
 import time
 import torch
 from random import randint
-from utils.loss_utils import l1_loss, ssim, norm_loss
+from utils.loss_utils import l1_loss, ssim, norm_loss, normal_loss_2DGS
 from gaussian_renderer import render, network_gui
 import sys
 from scene import Scene, GaussianModel
@@ -156,7 +156,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         newdepth.retain_grad()
         fx = fov2focal(viewpoint_cam.FoVx, viewpoint_cam.image_width)
         fy = fov2focal(viewpoint_cam.FoVy, viewpoint_cam.image_height)
-        Ln, depth_norm, loss_map = norm_loss(ray_P, ray_M, newdepth, fx, fy, viewpoint_cam.image_width, viewpoint_cam.image_height)
+        # Ln, depth_norm, loss_map = norm_loss(ray_P, ray_M, newdepth, fx, fy, viewpoint_cam.image_width, viewpoint_cam.image_height)
+        Ln, depth_norm, loss_map = normal_loss_2DGS(ray_P, ray_M, newdepth, viewpoint_cam)
         # torchvision.utils.save_image(image, f"image_{iteration:05d}.png")
         # nandepth = depth.clone().detach()
         # nandepth = torch.clip(nandepth, 0, 10)
@@ -272,7 +273,8 @@ def training_report(tb_writer, iteration, Ll1, Ln, loss, l1_loss, elapsed, testi
                     render_normal /= render_normal.norm(dim=0, keepdim=True) 
                     render_normal_color = (1 - render_normal) * 0.5
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
-                    Ln, depth_norm, loss_map = norm_loss(render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["depth"], fov2focal(viewpoint.FoVx, viewpoint.image_width), fov2focal(viewpoint.FoVy, viewpoint.image_height), viewpoint.image_width, viewpoint.image_height)
+                    # Ln, depth_norm, loss_map = norm_loss(render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["depth"], fov2focal(viewpoint.FoVx, viewpoint.image_width), fov2focal(viewpoint.FoVy, viewpoint.image_height), viewpoint.image_width, viewpoint.image_height)
+                    Ln, depth_norm, loss_map = normal_loss_2DGS(render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["depth"], viewpoint)
                     norm_color = (1 - depth_norm) * 0.5
                     similar_map = ((render_normal * depth_norm).sum(dim=0, keepdim=True) + 1) / 2.0
 

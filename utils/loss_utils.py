@@ -16,6 +16,7 @@ from math import exp
 from torchmetrics.functional.image import image_gradients
 from .graphics_utils import fov2focal
 import numpy as np
+import math
 
 def l1_loss(network_output, gt):
     return torch.abs((network_output - gt)).mean()
@@ -86,3 +87,60 @@ def norm_loss(P, M, depth, fx, fy, W, H):
     
     return (P - (M * normal).sum(dim=0, keepdim=True)).mean(), normal, (P - (M * normal).sum(dim=0, keepdim=True))/2.0
 
+
+
+def normal_loss_2DGS(P, M, depth, view):
+    W = view.image_width
+    H = view.image_height
+    fx = W / (2 * math.tan(view.FoVx / 2.))
+    fy = H / (2 * math.tan(view.FoVy / 2.))
+    cx=W/2.0
+    cy=H/2.0
+
+    x=torch.arange(W).reshape(1, -1).repeat(H, 1).to(depth.device)+0.5
+    y=torch.arange(H).reshape(-1, 1).repeat(1, W).to(depth.device)+0.5
+    x=(x-cx)/fx
+    y=(y-cy)/fy
+    view_ray = torch.stack([x, y, torch.ones_like(x)]).to(depth.device)
+    view_ray = view_ray / torch.norm(view_ray, dim=0, keepdim=True)
+    
+    xyz_ = torch.stack([x*depth.squeeze(), y*depth.squeeze(), depth.squeeze()])
+    _, dPy, dPx = torch.gradient(xyz_)
+
+    normal, xyz = depth_to_normal(view, depth)
+    normal = normal.permute(2, 0, 1)
+    xyz = xyz.permute(2, 0, 1)
+    return (P - (M * normal).sum(dim=0, keepdim=True)).mean(), normal, (P - (M * normal).sum(dim=0, keepdim=True))/2.0
+
+
+
+def depths_to_points(view, depthmap):
+    # c2w = (view.world_view_transform.T).inverse()
+    W, H = view.image_width, view.image_height
+    fx = W / (2 * math.tan(view.FoVx / 2.))
+    fy = H / (2 * math.tan(view.FoVy / 2.))
+    intrins = torch.tensor(
+        [[fx, 0., W/2.],
+        [0., fy, H/2.],
+        [0., 0., 1.0]]
+    ).float().cuda()
+    grid_x, grid_y = torch.meshgrid(torch.arange(W)+0.5, torch.arange(H)+0.5, indexing='xy')
+    points = torch.stack([grid_x, grid_y, torch.ones_like(grid_x)], dim=-1).reshape(-1, 3).float().cuda()
+    rays_d = points @ intrins.inverse().T
+    # rays_o = torch.zeros_like(rays_d)
+    points = depthmap.reshape(-1, 1) * rays_d #+ rays_o
+    return points
+
+
+def depth_to_normal(view, depth):
+    """
+        view: view camera
+        depth: depthmap 
+    """
+    points = depths_to_points(view, depth).reshape(*depth.shape[1:], 3)
+    output = torch.zeros_like(points)
+    dx = torch.cat([points[2:, 1:-1] - points[:-2, 1:-1]], dim=0)
+    dy = torch.cat([points[1:-1, 2:] - points[1:-1, :-2]], dim=1)
+    normal_map = torch.nn.functional.normalize(torch.cross(dx, dy, dim=-1), dim=-1)
+    output[1:-1, 1:-1, :] = normal_map
+    return output, points
