@@ -1,14 +1,31 @@
 # Implementation of 2D Gaussian Splatting for Geometrically Accurate Radiance Fields
 Yunzhou Song (Tim), Zixuan Lin (Jack), Yexin Zhang
 
+GRASP lab, University of Pennsylvania
+
 This repository contains the unofficial implementation of the paper ["2D Gaussian Splatting for Geometrically Accurate Radiance Fields"](https://arxiv.org/pdf/2403.17888).
+The detailed equations of our method are [here](https://cubic-keeper-3fa.notion.site/Release-Specification-7e01961c464040e583791b3654523127?pvs=4).
+
+Our implementation is as perfect in photometric reconstruction as that of 3D gs. We are eager to receive suggestions and open to feedback and criticism!
+
+We are still debugging!
+
+240502: Fix negative ray_M gradient.
 
 
 ## Acknowledgements
 This project is built upon [3DGS](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/).
 
 ## Overview
-放几张效果图
+<p float="left">
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/kitchen-rgb.jpg?raw=true" width="350" />
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/kitchen-normal.jpg?raw=true" width="350" /> 
+</p>
+<p float="left">
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/garden-rgb.png?raw=true" width="350" />
+  <img src="https://github.com/TimSong412/2D-gaussian/blob/main/assets/garden-normal.png?raw=true" width="350" /> 
+</p>
+**Rendered** RGB Image (left), **Rendered** Normal (right)
 
 ## Cloning the Repository
 
@@ -27,53 +44,69 @@ git clone https://github.com/TimSong412/2D-gaussian.git --recursive
 
 The optimizer uses PyTorch and CUDA extensions in a Python environment to produce trained models. 
 
-### Hardware Requirements 写AWS的配置
+### Hardware Requirements 
 
-- CUDA-ready GPU with Compute Capability 7.0+
+- CUDA-ready GPU with Compute Capability 8.6+
 - 24 GB VRAM (to train to paper evaluation quality)
 - Please see FAQ for smaller VRAM configurations
 
-### Software Requirements AWS配置
+### Software Requirements 
 - Conda (recommended for easy setup)
-- C++ Compiler for PyTorch extensions (we used Visual Studio 2019 for Windows)
-- CUDA SDK 11 for PyTorch extensions, install *after* Visual Studio (we used 11.8, **known issues with 11.6**)
+- C++ Compiler for PyTorch extensions 
+- CUDA SDK 12 for PyTorch extensions, install *after* Visual Studio (we used 12.1)
 - C++ Compiler and CUDA SDK must be compatible
 
-### Setup 下载数据，conda create，pip install -r req.txt，安装simple-knn，最后update package
+### Setup
 
-#### Local Setup
-
-Our default, provided install method is based on Conda package and environment management:
+**Download datasets**
 ```shell
-SET DISTUTILS_USE_SDK=1 # Windows only
-conda env create --file environment.yml
-conda activate gaussian_splatting
-```
-Please note that this process assumes that you have CUDA SDK **11** installed, not **12**. For modifications, see below.
-
-Tip: Downloading packages and creating a new environment with Conda can require a significant amount of disk space. By default, Conda will use the main system hard drive. You can avoid this by specifying a different package download location and an environment on a different drive:
-
-```shell
-conda config --add pkgs_dirs <Drive>/<pkg_path>
-conda env create --file environment.yml --prefix <Drive>/<env_path>/gaussian_splatting
-conda activate <Drive>/<env_path>/gaussian_splatting
+sh download.sh
 ```
 
-#### Modifications
+**Set up environment**
 
-If you can afford the disk space, we recommend using our environment files for setting up a training environment identical to ours. If you want to make modifications, please note that major version changes might affect the results of our method. However, our (limited) experiments suggest that the codebase works just fine inside a more up-to-date environment (Python 3.8, PyTorch 2.0.0, CUDA 12). Make sure to create an environment where PyTorch and its CUDA runtime version match and the installed CUDA SDK has no major version difference with PyTorch's CUDA version.
+You can run the following in parallel with the previous step
 
-#### Known Issues
+```shell
+conda create -n gs python=3.8 
+conda activate gs
+pip install -r requirements.txt
+pip install submodules/simple-knn
+bash update_pkg.sh
+```
 
-Some users experience problems building the submodules on Windows (```cl.exe: File not found``` or similar). Please consider the workaround for this problem from the FAQ.
+**Configuration**
+
+Checkout [Config.h](https://github.com/TimSong412/2D-surfel-gaussian/blob/main/submodules/diff-gaussian-rasterization/cuda_rasterizer/config.h) for options of regularization.
+
+```c
+#define Ld
+```
+and 
+```c
+#define Ln
+```
+turn on and off depth distortion (Ld) regularizer and normal consistency regularizer (Ln). `Wd` is the weight of depth distortion (Ld) loss. `Wn` is actually redundent, and the weight should be adjusted in train.py
+
+**Compile Rasterizer**
+
+Build binary of cuda rasterier
+
+```shell
+bash update_pkg.sh
+```
 
 ### Running
 
 To run the optimizer, simply use
-加一个example
 
 ```shell
 python train.py -s <path to COLMAP or NeRF Synthetic dataset>
+```
+
+*example*
+```shell
+python train.py -s dataset/garden
 ```
 
 <details>
@@ -156,6 +189,17 @@ python train.py -s <path to COLMAP or NeRF Synthetic dataset>
 Note that similar to MipNeRF360, we target images at resolutions in the 1-1.6K pixel range. For convenience, arbitrary-size inputs can be passed and will be automatically resized if their width exceeds 1600 pixels. We recommend to keep this behavior, but you may force training to use your higher-resolution images by setting ```-r 1```.
 
 The MipNeRF360 scenes are hosted by the paper authors [here](https://jonbarron.info/mipnerf360/). You can find our SfM data sets for Tanks&Temples and Deep Blending [here](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip). If you do not provide an output model directory (```-m```), trained models are written to folders with randomized unique names inside the ```output``` directory. At this point, the trained models may be viewed with the real-time viewer (see further below).
+
+### Additional Visualization
+
+In additional to RGB images, the script will render depth map, normal map, and 3D gaussian visualization
+
+```shell
+python vis_depth.py -m output/xxxxx --eval
+```
+
+
+### *-----The Rest Are Identitcal To That Of 3DGS-----*
 
 ### Evaluation
 By default, the trained models use all available images in the dataset. To train them while withholding a test set for evaluation, use the ```--eval``` flag. This way, you can render training/test sets and produce error metrics as follows:

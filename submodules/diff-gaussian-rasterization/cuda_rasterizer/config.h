@@ -25,5 +25,13 @@
 #define Wn 0.05f
 
 #define BlendingDepth
+// define an macro that represent Ld || Ln, used to compute shared values in backwards
+#ifdef Ld
+#define LdOrLn
+#else
+#ifdef Ln
+#define LdOrLn
+#endif
+#endif
 
 #endif

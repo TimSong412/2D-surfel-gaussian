@@ -296,8 +296,7 @@ __global__ void preprocessCUDA(
 		computeColorFromSH(idx, D, M, (glm::vec3 *)means, *campos, shs, clamped, (glm::vec3 *)dL_dcolor, (glm::vec3 *)dL_dmeans, (glm::vec3 *)dL_dsh);
 
 	// Compute gradient updates due to computing covariance from scale/rotation
-	if (scales)
-		computeASTuv(scales[idx], scale_modifier, rotations[idx], m, view, dL_dA + idx * 9, dL_dmeans + idx, dL_dscale + idx, dL_drot + idx);
+	computeASTuv(scales[idx], scale_modifier, rotations[idx], m, view, dL_dA + idx * 9, dL_dmeans + idx, dL_dscale + idx, dL_drot + idx);
 }
 
 // Backward version of the rendering procedure.
@@ -442,11 +441,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	done = done || (P_acc == 0.0f);
 
 	float thread_Ld = 0.0f;
-
-	// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 0 && threadIdx.y == 0)
-	// {
-	// 	printf("backray pix_x= %d; pix_y= %d; viewmat= [%f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f, %f]; ray_dir= [%f, %f, %f]\n", pix.x, pix.y, viewmatrix[0], viewmatrix[1], viewmatrix[2], viewmatrix[3], viewmatrix[4], viewmatrix[5], viewmatrix[6], viewmatrix[7], viewmatrix[8], viewmatrix[9], viewmatrix[10], viewmatrix[11], viewmatrix[12], viewmatrix[13], viewmatrix[14], viewmatrix[15], ray_dir.x, ray_dir.y, ray_dir.z);
-	// }
 
 	// Traverse all Gaussians
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
@@ -614,57 +608,30 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			Q_acc -= omega * ndc_m;
 			Q2Q_acc -= omega * ndc_m * ndc_m;
 
-// Logical OR using macro
-#ifdef Ld
-	// dz/dp
-	// viewmatrix[2, 0], coloumn major
-	const float dz_dp0 = viewmatrix[2];
-	const float dz_dp1 = viewmatrix[6];
-	const float dz_dp2 = viewmatrix[10];
-	// dz/du dz/dv
-	const float dz_du = collected_STuv[j * 6 + 0] * viewmatrix[2] + collected_STuv[j * 6 + 1] * viewmatrix[6] + collected_STuv[j * 6 + 2] * viewmatrix[10];
-	const float	dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[2] + collected_STuv[j * 6 + 4] * viewmatrix[6] + collected_STuv[j * 6 + 5] * viewmatrix[10];
-	// dz/dtu dz/dtv
-	const float	dz_dtu0 = viewmatrix[2] * collected_scale[j].x * u;
-	const float	dz_dtu1 = viewmatrix[6] * collected_scale[j].x * u;
-	const float	dz_dtu2 = viewmatrix[10] * collected_scale[j].x * u;
-	const float	dz_dtv0 = viewmatrix[2] * collected_scale[j].y * v;
-	const float	dz_dtv1 = viewmatrix[6] * collected_scale[j].y * v;
-	const float	dz_dtv2 = viewmatrix[10] * collected_scale[j].y * v;
-	// dz/ds
-	float dz_dsu = (viewmatrix[2] * collected_STuv[j * 6 + 0] + viewmatrix[6] * collected_STuv[j * 6 + 1] + viewmatrix[10] * collected_STuv[j * 6 + 2]) * u / collected_scale[j].x; // ti =sti / s
-	float dz_dsv = (viewmatrix[2] * collected_STuv[j * 6 + 3] + viewmatrix[6] * collected_STuv[j * 6 + 4] + viewmatrix[10] * collected_STuv[j * 6 + 5]) * v / collected_scale[j].y;;
-	// for (int k = 0; k < 3; k++)
-	// {
-	// 	dz_dsu += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
-	// 	dz_dsv += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
-	// }
-#else
-#ifdef Ln
-	// dz/dp
-	// viewmatrix[2, 0], coloumn major
-	const float dz_dp0 = viewmatrix[2];
-	const float dz_dp1 = viewmatrix[6];
-	const float dz_dp2 = viewmatrix[10];
-	// dz/du dz/dv
-	const float dz_du = collected_STuv[j * 6 + 0] * viewmatrix[2] + collected_STuv[j * 6 + 1] * viewmatrix[6] + collected_STuv[j * 6 + 2] * viewmatrix[10];
-	const float	dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[2] + collected_STuv[j * 6 + 4] * viewmatrix[6] + collected_STuv[j * 6 + 5] * viewmatrix[10];
-	// dz/dtu dz/dtv
-	const float	dz_dtu0 = viewmatrix[2] * collected_scale[j].x * u;
-	const float	dz_dtu1 = viewmatrix[6] * collected_scale[j].x * u;
-	const float	dz_dtu2 = viewmatrix[10] * collected_scale[j].x * u;
-	const float	dz_dtv0 = viewmatrix[2] * collected_scale[j].y * v;
-	const float	dz_dtv1 = viewmatrix[6] * collected_scale[j].y * v;
-	const float	dz_dtv2 = viewmatrix[10] * collected_scale[j].y * v;
-	// dz/ds
-	float dz_dsu = (viewmatrix[2] * collected_STuv[j * 6 + 0] + viewmatrix[6] * collected_STuv[j * 6 + 1] + viewmatrix[10] * collected_STuv[j * 6 + 2]) * u / collected_scale[j].x; // ti =sti / s
-	float dz_dsv = (viewmatrix[2] * collected_STuv[j * 6 + 3] + viewmatrix[6] * collected_STuv[j * 6 + 4] + viewmatrix[10] * collected_STuv[j * 6 + 5]) * v / collected_scale[j].y;;
-	// for (int k = 0; k < 3; k++)
-	// {
-	// 	dz_dsu += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
-	// 	dz_dsv += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
-	// }
-#endif
+#ifdef LdOrLn
+		// dz/dp
+		// viewmatrix[2, 0], coloumn major
+		const float dz_dp0 = viewmatrix[2];
+		const float dz_dp1 = viewmatrix[6];
+		const float dz_dp2 = viewmatrix[10];
+		// dz/du dz/dv
+		const float dz_du = collected_STuv[j * 6 + 0] * viewmatrix[2] + collected_STuv[j * 6 + 1] * viewmatrix[6] + collected_STuv[j * 6 + 2] * viewmatrix[10];
+		const float	dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[2] + collected_STuv[j * 6 + 4] * viewmatrix[6] + collected_STuv[j * 6 + 5] * viewmatrix[10];
+		// dz/dtu dz/dtv
+		const float	dz_dtu0 = viewmatrix[2] * collected_scale[j].x * u;
+		const float	dz_dtu1 = viewmatrix[6] * collected_scale[j].x * u;
+		const float	dz_dtu2 = viewmatrix[10] * collected_scale[j].x * u;
+		const float	dz_dtv0 = viewmatrix[2] * collected_scale[j].y * v;
+		const float	dz_dtv1 = viewmatrix[6] * collected_scale[j].y * v;
+		const float	dz_dtv2 = viewmatrix[10] * collected_scale[j].y * v;
+		// dz/ds
+		float dz_dsu = (viewmatrix[2] * collected_STuv[j * 6 + 0] + viewmatrix[6] * collected_STuv[j * 6 + 1] + viewmatrix[10] * collected_STuv[j * 6 + 2]) * u / collected_scale[j].x; // ti =sti / s
+		float dz_dsv = (viewmatrix[2] * collected_STuv[j * 6 + 3] + viewmatrix[6] * collected_STuv[j * 6 + 4] + viewmatrix[10] * collected_STuv[j * 6 + 5]) * v / collected_scale[j].y;;
+		// for (int k = 0; k < 3; k++)
+		// {
+		// 	dz_dsu += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
+		// 	dz_dsv += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
+		// }
 #endif
 
 #ifdef Ld

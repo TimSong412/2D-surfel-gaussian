@@ -510,11 +510,23 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 #ifdef BlendingDepth
 			D += intersect_c.z * alpha * T;
 #else
+			weight += alpha * T;
+
+			float3 normal_i = collected_normal[j];
+			// all normals are toward the camera
+			if ((normal_i.x * ray_dir.x + normal_i.y * ray_dir.y + normal_i.z * ray_dir.z) > 0)
+			{
+				normal_i.x = -normal_i.x;
+				normal_i.y = -normal_i.y;
+				normal_i.z = -normal_i.z;
+			}
+
 			if (T >= 0.5f)
 			{
 				D = intersect_c.z;
 				depth_contributor = last_contributor; // last_contributor, to match the backward 
 				
+				normal_intersect = normal_i;
 				
 				if (glm::abs(collected_normal[j].x * collected_normal[j].x + collected_normal[j].y * collected_normal[j].y + collected_normal[j].z * collected_normal[j].z - 1) > 0.0001f)
 				{
@@ -528,6 +540,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			
 
+
 			ndc_m = z2ndc(intersect_c.z);
 			omega = alpha * T;
 
@@ -537,17 +550,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			P_acc += omega;
 			Q_acc += omega * ndc_m;
 			Q2Q_acc += omega * ndc_m * ndc_m;
-			M_acc.x += omega * collected_normal[j].x;
-			M_acc.y += omega * collected_normal[j].y;
-			M_acc.z += omega * collected_normal[j].z;
+			M_acc.x += omega * normal_i.x;
+			M_acc.y += omega * normal_i.y;
+			M_acc.z += omega * normal_i.z;
 
-			float3 normal_i = collected_normal[j];
-			if ((normal_i.x * ray_dir.x + normal_i.y * ray_dir.y + normal_i.z * ray_dir.z) > 0)
-			{
-				normal_i.x = -normal_i.x;
-				normal_i.y = -normal_i.y;
-				normal_i.z = -normal_i.z;
-			}
+			
 			normal_blend.x += omega * normal_i.x;
 			normal_blend.y += omega * normal_i.y;
 			normal_blend.z += omega * normal_i.z;
@@ -581,6 +588,9 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			out_normal[1 * H * W + pix_id] /= length;
 			out_normal[2 * H * W + pix_id] /= length;
 		}
+		// out_normal[0 * H * W + pix_id] = normal_intersect.x;
+		// out_normal[1 * H * W + pix_id] = normal_intersect.y;
+		// out_normal[2 * H * W + pix_id] = normal_intersect.z;
 		ray_P[pix_id] = P_acc;
 		ray_Q[pix_id] = Q_acc;
 		ray_Q2Q[pix_id] = Q2Q_acc;
