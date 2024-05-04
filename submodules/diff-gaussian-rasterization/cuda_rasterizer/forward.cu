@@ -347,7 +347,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const float *__restrict__ orig_points,
 		const float *viewmatrix,
 		int W, int H,
-		const float *__restrict__ gt_exp_neg_grad,
 		const float focal_x,
 		const float focal_y,
 		const float2 *__restrict__ points_xy_image,
@@ -364,6 +363,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		float *__restrict__ out_color,
 		float *__restrict__ out_depth,
 		float *__restrict__ out_normal,
+		float *__restrict__ out_distortion,
 		float *__restrict__ ray_P,
 		float *__restrict__ ray_Q,
 		float *__restrict__ ray_Q2Q,
@@ -578,6 +578,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
 		out_alpha[pix_id] = weight; // 1 - T;
 		out_depth[pix_id] = D;// / P_acc;
+		out_distortion[pix_id] = thread_Ld;
 		// store normal like RGB, out_normal size: C*H*W, C = 3
 		
 		out_normal[0 * H * W + pix_id] = normal_blend.x / P_acc;
@@ -612,7 +613,6 @@ void FORWARD::render(
 	const float *orig_points,
 	const float *viewmatrix,
 	int W, int H,
-	const float *gt_exp_neg_grad,
 	const float focal_x,
 	const float focal_y,
 	const float2 *means2D,
@@ -629,6 +629,7 @@ void FORWARD::render(
 	float *out_color,
 	float *out_depth,
 	float *out_normal,
+	float *out_distortion,
 	float *ray_P,
 	float *ray_Q,
 	float *ray_Q2Q,
@@ -640,7 +641,6 @@ void FORWARD::render(
 		orig_points,
 		viewmatrix,
 		W, H,
-		gt_exp_neg_grad,
 		focal_x,
 		focal_y,
 		means2D,
@@ -657,6 +657,7 @@ void FORWARD::render(
 		out_color,
 		out_depth,
 		out_normal,
+		out_distortion,
 		ray_P,
 		ray_Q,
 		ray_Q2Q,

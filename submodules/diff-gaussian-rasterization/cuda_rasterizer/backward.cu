@@ -308,7 +308,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const float *__restrict__ orig_points,
 		const float *viewmatrix,
 		int W, int H,
-		const float *__restrict__ gt_exp_neg_grad,
 		const float focal_x, const float focal_y,
 		const float *__restrict__ bg_color,
 		const float2 *__restrict__ points_xy_image,
@@ -330,6 +329,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const float *__restrict__ dL_dpixel_depths,
 		const float *__restrict__ dL_dalphas,
 		const float *__restrict__ dL_normals,
+		const float *__restrict__ dL_ddistortion,
 		const float *__restrict__ dL_dP,
 		const float *__restrict__ dL_dM,
 		float3 *__restrict__ dL_dmean2D,
@@ -396,6 +396,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 	float accum_dLn_domega_rec = 0;
 
+	float dL_ddistortion_pix = 0;
+
 	float P_acc = 0.0f;
 	float Q_acc = 0.0f;
 	float Q2Q_acc = 0.0f;
@@ -413,6 +415,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dL_dpixel[i] = dL_dpixels[i * H * W + pix_id];
 		dL_dpixel_depth = dL_dpixel_depths[pix_id];
 		dL_dalpha = dL_dalphas[pix_id];
+		dL_ddistortion_pix = dL_ddistortion[pix_id];
 		P_acc = ray_P[pix_id];
 		Q_acc = ray_Q[pix_id];
 		Q2Q_acc = ray_Q2Q[pix_id];
@@ -636,15 +639,15 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 #endif
 
 #ifdef Ld
-			const float edge_normalization_weight = gt_exp_neg_grad[pix_id];
-			const float dLd_domega = Wd * (ndc_m * ndc_m * P_start + Q2Q_start - 2 * ndc_m * Q_start) / (W * H) * edge_normalization_weight;
+
+			const float dLd_domega = (ndc_m * ndc_m * P_start + Q2Q_start - 2 * ndc_m * Q_start) * dL_ddistortion_pix;
 
 			dL_dopa += (T * (dLd_domega - accum_dLd_domega_rec));
 			last_dLd_domega = dLd_domega;
-			thread_Ld += Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)) / (W * H) * edge_normalization_weight;
+			thread_Ld += (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)) * dL_ddistortion_pix;
 
 			// dL/dm
-			const float dL_dm = Wd * 2 * omega * (ndc_m * P_start - Q_start) / (W * H) * edge_normalization_weight;
+			const float dL_dm = 2 * omega * (ndc_m * P_start - Q_start) * dL_ddistortion_pix;
 			dm_dz = 2 * far * near / ((far - near) * intersect_c.z * intersect_c.z);
 			dL_dz = dL_dm * dm_dz;
 
@@ -903,7 +906,6 @@ void BACKWARD::render(
 	const float *orig_points,
 	const float *viewmatrix,
 	int W, int H,
-	const float *gt_exp_neg_grad,
 	const float focal_x, const float focal_y,
 	const float *bg_color,
 	const float2 *means2D,
@@ -925,6 +927,7 @@ void BACKWARD::render(
 	const float *dL_dpixel_depths,
 	const float *dL_dalphas,
 	const float *dL_dnormals,
+	const float *dL_ddistortion,
 	const float *dL_dP,
 	const float *dL_dM,
 	float3 *dL_dmean2D,
@@ -948,7 +951,6 @@ void BACKWARD::render(
 		orig_points,
 		viewmatrix,
 		W, H,
-		gt_exp_neg_grad,
 		focal_x, focal_y,
 		bg_color,
 		means2D,
@@ -970,6 +972,7 @@ void BACKWARD::render(
 		dL_dpixel_depths,
 		dL_dalphas,
 		dL_dnormals,
+		dL_ddistortion,
 		dL_dP,
 		dL_dM,
 		dL_dmean2D,

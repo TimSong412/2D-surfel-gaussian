@@ -145,8 +145,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         gt_exp_neg_grad = get_edge_map(gt_image)
 
-        render_pkg = render(viewpoint_cam, gaussians, pipe, bg, Ld_value=Ld_value, gt_exp_neg_grad=gt_exp_neg_grad)
-        image, viewspace_point_tensor, visibility_filter, radii, depth, ray_P, ray_M, blend_normal = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["depth"], render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["normal"]
+        render_pkg = render(viewpoint_cam, gaussians, pipe, bg, Ld_value=Ld_value)
+        image, viewspace_point_tensor, visibility_filter, radii, depth, distortion, ray_P, ray_M, blend_normal = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["depth"], render_pkg["distortion"], render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["normal"]
         ray_P.retain_grad()
         ray_M.retain_grad()
         depth.retain_grad()
@@ -159,13 +159,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         newdepth.retain_grad()
         # Ln, depth_norm, loss_map = norm_loss(ray_P, ray_M, newdepth, fx, fy, viewpoint_cam.image_width, viewpoint_cam.image_height)
         Ln, depth_norm, loss_map = normal_loss_2DGS(ray_P, ray_M, newdepth, viewpoint_cam)
+        Ld = (distortion * gt_exp_neg_grad).mean()
         # torchvision.utils.save_image(image, f"image_{iteration:05d}.png")
         # nandepth = depth.clone().detach()
         # nandepth = torch.clip(nandepth, 0, 10)
         # torchvision.utils.save_image(nandepth/10.0, f"depth_{iteration:05d}.png")
         if torch.isnan(Ln):
             print("Nan Loss")
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.05 * Ln
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.05 * Ln + 100 * Ld
         loss.backward()
 
         # gradient clipping

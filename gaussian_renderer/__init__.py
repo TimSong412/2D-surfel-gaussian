@@ -15,7 +15,7 @@ from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianR
 from scene.gaussian_model import GaussianModel
 from utils.sh_utils import eval_sh
 
-def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None, Ld_value = None, gt_exp_neg_grad = None):
+def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None, Ld_value = None):
     """
     Render the scene. 
     
@@ -35,11 +35,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     tanfovx = math.tan(viewpoint_camera.FoVx * 0.5)
     tanfovy = math.tan(viewpoint_camera.FoVy * 0.5)
 
-    if gt_exp_neg_grad is None:
-        gt_exp_neg_grad = torch.ones((int(viewpoint_camera.image_width), int(viewpoint_camera.image_height)))
-
     raster_settings = GaussianRasterizationSettings(
-        gt_exp_neg_grad=gt_exp_neg_grad,
         image_height=int(viewpoint_camera.image_height),
         image_width=int(viewpoint_camera.image_width),
         tanfovx=tanfovx,
@@ -89,7 +85,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         colors_precomp = override_color
 
     # Rasterize visible Gaussians to image, obtain their radii (on screen). 
-    rendered_image, radii, depth, alpha, normal, ray_P, ray_M = rasterizer(
+    rendered_image, radii, depth, alpha, normal, distortion, ray_P, ray_M = rasterizer(
         means3D = means3D,
         means2D = means2D,
         shs = shs,
@@ -108,5 +104,6 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             "depth": depth,
             "alpha": alpha, 
             "normal": normal,
+            "distortion": distortion,
             "ray_P": ray_P,
             "ray_M": ray_M}
