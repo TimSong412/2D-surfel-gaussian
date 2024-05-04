@@ -400,7 +400,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	__shared__ float collected_STuv[BLOCK_SIZE * 6];
 	__shared__ float collected_origin[BLOCK_SIZE * 3];
 	__shared__ float3 collected_normal[BLOCK_SIZE];
-	// __shared__ float collected_normal[BLOCK_SIZE * 3];
 
 	// Initialize helper variables
 	float T = 1.0f;
@@ -539,15 +538,12 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 #endif
 			weight += alpha * T;
 
-
-			
-
-
 			ndc_m = z2ndc(intersect_c.z);
 			omega = alpha * T;
 
+#ifdef Ld
 			thread_Ld += omega * (ndc_m* ndc_m * P_acc - 2 * ndc_m * Q_acc + Q2Q_acc);
-
+#endif
 
 			P_acc += omega;
 			Q_acc += omega * ndc_m;
@@ -578,7 +574,14 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
 		out_alpha[pix_id] = weight; // 1 - T;
 		out_depth[pix_id] = D;// / P_acc;
+#ifdef Ld
+		// uncomment the line below to add normalization to transimitance
+		// will up weight the pixels that are not opaque
+		// note: has minimal improvement on reconstruction, 
+		// but has know issue of cause missing patches (area with no gaussians) for certain views (reason unknown)
+		// thread_Ld /= (1 - T) * (1 - T) + 1e-7;
 		out_distortion[pix_id] = thread_Ld;
+#endif
 		// store normal like RGB, out_normal size: C*H*W, C = 3
 		
 		out_normal[0 * H * W + pix_id] = normal_blend.x / P_acc;
