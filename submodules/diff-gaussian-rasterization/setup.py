@@ -26,7 +26,7 @@ setup(
             "cuda_rasterizer/backward.cu",
             "rasterize_points.cu",
             "ext.cpp"],
-            extra_compile_args={"nvcc": ["-g","-G","-Xcompiler", "-rdynamic", "-lineinfo", "-t4", "-I" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "third_party/glm/")],
+            extra_compile_args={"nvcc": ["-Xcompiler", "-rdynamic", "-lineinfo", "-t4", "-I" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "third_party/glm/")],
                                 "gcc": ["-j4", "-g"]})
         ],
     cmdclass={

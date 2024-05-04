@@ -427,8 +427,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 	float last_dLn_domega = 0;
 
-	printf("backwards");
-
 	float omega = 0;
 	float ndc_m = 0;
 

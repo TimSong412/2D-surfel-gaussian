@@ -157,3 +157,6 @@ def get_edge_map(gt_image):
     max_grad = torch.max(torch.stack([grad_img_left, grad_img_right, grad_img_top, grad_img_bottom], dim=-1), dim=-1)[0]
     # pad
     max_grad = torch.exp(-max_grad)
+    max_grad = torch.nn.functional.pad(max_grad, (1, 1, 1, 1), mode="constant", value=0)
+
+    return max_grad
