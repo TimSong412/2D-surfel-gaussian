@@ -518,9 +518,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				normal_i.z = -normal_i.z;
 			}
 
-#ifdef BlendingDepth
-			D += intersect_c.z * alpha * T;
-#else
 
 			if (T >= 0.5f)
 			{
@@ -535,7 +532,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				}
 				
 			}
-#endif
+			
 			weight += alpha * T;
 
 			ndc_m = z2ndc(intersect_c.z);

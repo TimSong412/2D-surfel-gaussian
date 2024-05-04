@@ -733,24 +733,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&dL_drot[global_id].z, dLn_dy);
 			atomicAdd(&dL_drot[global_id].w, dLn_dz);
 
-			// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 0 && threadIdx.y == 0)
-			// {
-			// 	printf("contrib= %d, alpha= %f, omega=%f, r= %f, x= %f, y= %f, z= %f, dL_dr= %f, dL_dx= %f, dL_dy= %f, dL_dz= %f, dL_dopa= %f, dep= %f\n", contributor, alpha, omega, r, x, y, z, dLn_dr, dLn_dx, dLn_dy, dLn_dz, (T * (dLn_domega - accum_dLn_domega_rec)), intersect_c.z);
-			// }
 			
-#ifdef BlendingDepth
-				const float condition = true;
-#else 
-				const float condition = contributor == depth_contrib[pix_id];
-#endif
-			
-			if (condition) {
+			if (contributor == depth_contrib[pix_id]) {
 
-#ifdef BlendingDepth
-				const float dL_ddepth = dL_dpixel_depths[pix_id] * dpixel_depth_ddepth;
-#else 
 				const float dL_ddepth = dL_dpixel_depths[pix_id];
-#endif
+
 				// dL/dp
 				atomicAdd(&dL_dmeans3D[global_id].x, dL_ddepth * dz_dp0);
 				atomicAdd(&dL_dmeans3D[global_id].y, dL_ddepth * dz_dp1);

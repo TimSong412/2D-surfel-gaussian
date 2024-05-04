@@ -150,20 +150,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         ray_P.retain_grad()
         ray_M.retain_grad()
         depth.retain_grad()
-        # if (ray_P == 0.0).sum() > 0:
-        #     print("Zero ray_P")
-        # Loss
         
         Ll1 = l1_loss(image, gt_image)
         newdepth = torch.clamp(depth, 0.1)
         newdepth.retain_grad()
-        # Ln, depth_norm, loss_map = norm_loss(ray_P, ray_M, newdepth, fx, fy, viewpoint_cam.image_width, viewpoint_cam.image_height)
+
         Ln, depth_norm, loss_map = normal_loss_2DGS(ray_P, ray_M, newdepth, viewpoint_cam)
         Ld = (distortion * gt_exp_neg_grad).mean()
-        # torchvision.utils.save_image(image, f"image_{iteration:05d}.png")
-        # nandepth = depth.clone().detach()
-        # nandepth = torch.clip(nandepth, 0, 10)
-        # torchvision.utils.save_image(nandepth/10.0, f"depth_{iteration:05d}.png")
+        
         if torch.isnan(Ln):
             print("Nan Loss")
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.05 * Ln + 100 * Ld
@@ -171,11 +165,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         # gradient clipping
         gradnorm = torch.nn.utils.clip_grad_norm_(gaussians.get_paramlist(), 2e-4)
-
-        # if iteration % 50 == 1:
-        #     vis_value(gaussians.get_opacity, gaussians._xyz, iteration, "./value_GT")
-        #     vis_grad(gaussians._opacity.grad, gaussians._xyz, iteration, ".")
-        
         
         iter_end.record()
 
