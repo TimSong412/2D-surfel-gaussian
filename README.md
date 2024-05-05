@@ -11,7 +11,8 @@ Our implementation is as perfect in photometric reconstruction as that of 3D gs.
 We are still debugging!
 
 240502: Fix negative ray_M gradient.
-240505: Add edge-aware distrotion 
+
+240505: Add edge-aware distortion.
 
 ## Acknowledgements
 This project is built upon [3DGS](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/).
