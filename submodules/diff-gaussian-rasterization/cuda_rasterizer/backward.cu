@@ -329,6 +329,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		const float *__restrict__ dL_dpixel_depths,
 		const float *__restrict__ dL_dalphas,
 		const float *__restrict__ dL_normals,
+		const float *__restrict__ dL_ddistortion,
 		const float *__restrict__ dL_dP,
 		const float *__restrict__ dL_dM,
 		float3 *__restrict__ dL_dmean2D,
@@ -395,6 +396,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 	float accum_dLn_domega_rec = 0;
 
+	float dL_ddistortion_pix = 0;
+
 	float P_acc = 0.0f;
 	float Q_acc = 0.0f;
 	float Q2Q_acc = 0.0f;
@@ -412,6 +415,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dL_dpixel[i] = dL_dpixels[i * H * W + pix_id];
 		dL_dpixel_depth = dL_dpixel_depths[pix_id];
 		dL_dalpha = dL_dalphas[pix_id];
+		dL_ddistortion_pix = dL_ddistortion[pix_id];
 		P_acc = ray_P[pix_id];
 		Q_acc = ray_Q[pix_id];
 		Q2Q_acc = ray_Q2Q[pix_id];
@@ -635,14 +639,15 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 #endif
 
 #ifdef Ld
-			const float dLd_domega = Wd * (ndc_m * ndc_m * P_start + Q2Q_start - 2 * ndc_m * Q_start) / (W * H);
+
+			const float dLd_domega = (ndc_m * ndc_m * P_start + Q2Q_start - 2 * ndc_m * Q_start) * dL_ddistortion_pix;
 
 			dL_dopa += (T * (dLd_domega - accum_dLd_domega_rec));
 			last_dLd_domega = dLd_domega;
-			thread_Ld += Wd * (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)) / (W * H);
+			thread_Ld += (omega * (ndc_m * ndc_m * P_acc + Q2Q_acc - 2 * ndc_m * Q_acc)) * dL_ddistortion_pix;
 
 			// dL/dm
-			const float dL_dm = Wd * 2 * omega * (ndc_m * P_start - Q_start) / (W * H);
+			const float dL_dm = 2 * omega * (ndc_m * P_start - Q_start) * dL_ddistortion_pix;
 			dm_dz = 2 * far * near / ((far - near) * intersect_c.z * intersect_c.z);
 			dL_dz = dL_dm * dm_dz;
 
@@ -728,28 +733,25 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&dL_drot[global_id].z, dLn_dy);
 			atomicAdd(&dL_drot[global_id].w, dLn_dz);
 
-			// if (blockIdx.x == 50 && blockIdx.y == 30 && threadIdx.x == 0 && threadIdx.y == 0)
-			// {
-			// 	printf("contrib= %d, alpha= %f, omega=%f, r= %f, x= %f, y= %f, z= %f, dL_dr= %f, dL_dx= %f, dL_dy= %f, dL_dz= %f, dL_dopa= %f, dep= %f\n", contributor, alpha, omega, r, x, y, z, dLn_dr, dLn_dx, dLn_dy, dLn_dz, (T * (dLn_domega - accum_dLn_domega_rec)), intersect_c.z);
-			// }
 			
-
-
 			if (contributor == depth_contrib[pix_id]) {
+
+				const float dL_ddepth = dL_dpixel_depths[pix_id];
+
 				// dL/dp
-				atomicAdd(&dL_dmeans3D[global_id].x, dL_dpixel_depths[pix_id] * dz_dp0);
-				atomicAdd(&dL_dmeans3D[global_id].y, dL_dpixel_depths[pix_id] * dz_dp1);
-				atomicAdd(&dL_dmeans3D[global_id].z, dL_dpixel_depths[pix_id] * dz_dp2);
+				atomicAdd(&dL_dmeans3D[global_id].x, dL_ddepth * dz_dp0);
+				atomicAdd(&dL_dmeans3D[global_id].y, dL_ddepth * dz_dp1);
+				atomicAdd(&dL_dmeans3D[global_id].z, dL_ddepth * dz_dp2);
 
-				atomicAdd(&dL_dscale[global_id].x, dL_dpixel_depths[pix_id] * dz_dsu);
-				atomicAdd(&dL_dscale[global_id].y, dL_dpixel_depths[pix_id] * dz_dsv);
+				atomicAdd(&dL_dscale[global_id].x, dL_ddepth * dz_dsu);
+				atomicAdd(&dL_dscale[global_id].y, dL_ddepth * dz_dsv);
 
-				const float dLn_dtu0 = dL_dpixel_depths[pix_id] * dz_dtu0;
-				const float dLn_dtu1 = dL_dpixel_depths[pix_id] * dz_dtu1;
-				const float dLn_dtu2 = dL_dpixel_depths[pix_id] * dz_dtu2;
-				const float dLn_dtv0 = dL_dpixel_depths[pix_id] * dz_dtv0;
-				const float dLn_dtv1 = dL_dpixel_depths[pix_id] * dz_dtv1;
-				const float dLn_dtv2 = dL_dpixel_depths[pix_id] * dz_dtv2;
+				const float dLn_dtu0 = dL_ddepth * dz_dtu0;
+				const float dLn_dtu1 = dL_ddepth * dz_dtu1;
+				const float dLn_dtu2 = dL_ddepth * dz_dtu2;
+				const float dLn_dtv0 = dL_ddepth * dz_dtv0;
+				const float dLn_dtv1 = dL_ddepth * dz_dtv1;
+				const float dLn_dtv2 = dL_ddepth * dz_dtv2;
 
 				// compute gradient through quaternion
 				dLn_dr = 2.0f * (z * (dLn_dtu1 - dLn_dtv0) - y * dLn_dtu2 + x * dLn_dtv2);
@@ -762,15 +764,15 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				atomicAdd(&dL_drot[global_id].z, dLn_dy);
 				atomicAdd(&dL_drot[global_id].w, dLn_dz);
 
-				dL_dA_local[0][0] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhu1) + dz_dv * (-dv_dhu1));
-				dL_dA_local[0][1] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhv1) + dz_dv * (-dv_dhv1));
-				dL_dA_local[0][2] += dL_dpixel_depths[pix_id] * (dz_du * (du_dhu1 * pix_cam.x + du_dhv1 * pix_cam.y) + dz_dv * (dv_dhu1 * pix_cam.x + dv_dhv1 * pix_cam.y));
-				dL_dA_local[1][0] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhu2) + dz_dv * (-dv_dhu2));
-				dL_dA_local[1][1] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhv2) + dz_dv * (-dv_dhv2));
-				dL_dA_local[1][2] += dL_dpixel_depths[pix_id] * (dz_du * (du_dhu2 * pix_cam.x + du_dhv2 * pix_cam.y) + dz_dv * (dv_dhu2 * pix_cam.x + dv_dhv2 * pix_cam.y));
-				dL_dA_local[2][0] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhu3) + dz_dv * (-dv_dhu3));
-				dL_dA_local[2][1] += dL_dpixel_depths[pix_id] * (dz_du * (-du_dhv3) + dz_dv * (-dv_dhv3));
-				dL_dA_local[2][2] += dL_dpixel_depths[pix_id] * (dz_du * (du_dhu3 * pix_cam.x + du_dhv3 * pix_cam.y) + dz_dv * (dv_dhu3 * pix_cam.x + dv_dhv3 * pix_cam.y));
+				dL_dA_local[0][0] += dL_ddepth * (dz_du * (-du_dhu1) + dz_dv * (-dv_dhu1));
+				dL_dA_local[0][1] += dL_ddepth * (dz_du * (-du_dhv1) + dz_dv * (-dv_dhv1));
+				dL_dA_local[0][2] += dL_ddepth * (dz_du * (du_dhu1 * pix_cam.x + du_dhv1 * pix_cam.y) + dz_dv * (dv_dhu1 * pix_cam.x + dv_dhv1 * pix_cam.y));
+				dL_dA_local[1][0] += dL_ddepth * (dz_du * (-du_dhu2) + dz_dv * (-dv_dhu2));
+				dL_dA_local[1][1] += dL_ddepth * (dz_du * (-du_dhv2) + dz_dv * (-dv_dhv2));
+				dL_dA_local[1][2] += dL_ddepth * (dz_du * (du_dhu2 * pix_cam.x + du_dhv2 * pix_cam.y) + dz_dv * (dv_dhu2 * pix_cam.x + dv_dhv2 * pix_cam.y));
+				dL_dA_local[2][0] += dL_ddepth * (dz_du * (-du_dhu3) + dz_dv * (-dv_dhu3));
+				dL_dA_local[2][1] += dL_ddepth * (dz_du * (-du_dhv3) + dz_dv * (-dv_dhv3));
+				dL_dA_local[2][2] += dL_ddepth * (dz_du * (du_dhu3 * pix_cam.x + du_dhv3 * pix_cam.y) + dz_dv * (dv_dhu3 * pix_cam.x + dv_dhv3 * pix_cam.y));
 
 			}
 
@@ -912,6 +914,7 @@ void BACKWARD::render(
 	const float *dL_dpixel_depths,
 	const float *dL_dalphas,
 	const float *dL_dnormals,
+	const float *dL_ddistortion,
 	const float *dL_dP,
 	const float *dL_dM,
 	float3 *dL_dmean2D,
@@ -956,6 +959,7 @@ void BACKWARD::render(
 		dL_dpixel_depths,
 		dL_dalphas,
 		dL_dnormals,
+		dL_ddistortion,
 		dL_dP,
 		dL_dM,
 		dL_dmean2D,

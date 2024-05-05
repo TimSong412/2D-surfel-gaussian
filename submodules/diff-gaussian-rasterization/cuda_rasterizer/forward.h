@@ -74,6 +74,7 @@ namespace FORWARD
 		float *out_color,
 		float *out_depth,
 		float *out_normal,
+		float *out_distortion,
 		float *ray_P,
 		float *ray_Q,
 		float *ray_Q2Q,

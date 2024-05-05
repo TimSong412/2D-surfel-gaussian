@@ -13,7 +13,7 @@ import os
 import time
 import torch
 from random import randint
-from utils.loss_utils import l1_loss, ssim, norm_loss
+from utils.loss_utils import l1_loss, ssim, norm_loss, normal_loss_2DGS, get_edge_map
 from gaussian_renderer import render, network_gui
 import sys
 from scene import Scene, GaussianModel
@@ -141,38 +141,30 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             pipe.debug = True
 
         bg = torch.rand((3), device="cuda") if opt.random_background else background
+        gt_image = viewpoint_cam.original_image.cuda()
+
+        gt_exp_neg_grad = get_edge_map(gt_image)
 
         render_pkg = render(viewpoint_cam, gaussians, pipe, bg, Ld_value=Ld_value)
-        image, viewspace_point_tensor, visibility_filter, radii, depth, ray_P, ray_M, blend_normal = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["depth"], render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["normal"]
+        image, viewspace_point_tensor, visibility_filter, radii, depth, distortion, ray_P, ray_M, blend_normal = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["depth"], render_pkg["distortion"], render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["normal"]
         ray_P.retain_grad()
         ray_M.retain_grad()
         depth.retain_grad()
-        # if (ray_P == 0.0).sum() > 0:
-        #     print("Zero ray_P")
-        # Loss
-        gt_image = viewpoint_cam.original_image.cuda()
+        
         Ll1 = l1_loss(image, gt_image)
         newdepth = torch.clamp(depth, 0.1)
         newdepth.retain_grad()
-        fx = fov2focal(viewpoint_cam.FoVx, viewpoint_cam.image_width)
-        fy = fov2focal(viewpoint_cam.FoVy, viewpoint_cam.image_height)
-        Ln, depth_norm, loss_map = norm_loss(ray_P, ray_M, newdepth, fx, fy, viewpoint_cam.image_width, viewpoint_cam.image_height)
-        # torchvision.utils.save_image(image, f"image_{iteration:05d}.png")
-        # nandepth = depth.clone().detach()
-        # nandepth = torch.clip(nandepth, 0, 10)
-        # torchvision.utils.save_image(nandepth/10.0, f"depth_{iteration:05d}.png")
+
+        Ln, depth_norm, loss_map = normal_loss_2DGS(ray_P, ray_M, newdepth, viewpoint_cam)
+        Ld = (distortion * gt_exp_neg_grad).mean()
+        
         if torch.isnan(Ln):
             print("Nan Loss")
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.05 * Ln
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.05 * Ln + 100 * Ld
         loss.backward()
 
         # gradient clipping
         gradnorm = torch.nn.utils.clip_grad_norm_(gaussians.get_paramlist(), 2e-4)
-
-        # if iteration % 50 == 1:
-        #     vis_value(gaussians.get_opacity, gaussians._xyz, iteration, "./value_GT")
-        #     vis_grad(gaussians._opacity.grad, gaussians._xyz, iteration, ".")
-        
         
         iter_end.record()
 
@@ -272,7 +264,8 @@ def training_report(tb_writer, iteration, Ll1, Ln, loss, l1_loss, elapsed, testi
                     render_normal /= render_normal.norm(dim=0, keepdim=True) 
                     render_normal_color = (1 - render_normal) * 0.5
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
-                    Ln, depth_norm, loss_map = norm_loss(render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["depth"], fov2focal(viewpoint.FoVx, viewpoint.image_width), fov2focal(viewpoint.FoVy, viewpoint.image_height), viewpoint.image_width, viewpoint.image_height)
+                    # Ln, depth_norm, loss_map = norm_loss(render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["depth"], fov2focal(viewpoint.FoVx, viewpoint.image_width), fov2focal(viewpoint.FoVy, viewpoint.image_height), viewpoint.image_width, viewpoint.image_height)
+                    Ln, depth_norm, loss_map = normal_loss_2DGS(render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["depth"], viewpoint)
                     norm_color = (1 - depth_norm) * 0.5
                     similar_map = ((render_normal * depth_norm).sum(dim=0, keepdim=True) + 1) / 2.0
 

@@ -86,7 +86,8 @@ and
 ```c
 #define Ln
 ```
-turn on and off depth distortion (Ld) regularizer and normal consistency regularizer (Ln). `Wd` is the weight of depth distortion (Ld) loss. `Wn` is actually redundent, and the weight should be adjusted in train.py
+turn on and off depth distortion (Ld) regularizer and normal consistency regularizer (Ln). 
+The weight of `Ld` and `Ln` can be adjusted at (or around) line 163 of `train.py`. 
 
 **Compile Rasterizer**
 

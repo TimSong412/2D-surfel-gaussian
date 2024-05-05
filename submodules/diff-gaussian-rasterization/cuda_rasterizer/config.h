@@ -17,12 +17,10 @@
 #define BLOCK_Y 16
 
 #define Ld
-#define Wd 100.0f
 #define far 1000.0f
 #define near 0.2f
 
 #define Ln
-#define Wn 0.05f
 
 // define an macro that represent Ld || Ln, used to compute shared values in backwards
 #ifdef Ld

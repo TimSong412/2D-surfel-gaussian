@@ -363,6 +363,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		float *__restrict__ out_color,
 		float *__restrict__ out_depth,
 		float *__restrict__ out_normal,
+		float *__restrict__ out_distortion,
 		float *__restrict__ ray_P,
 		float *__restrict__ ray_Q,
 		float *__restrict__ ray_Q2Q,
@@ -399,7 +400,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	__shared__ float collected_STuv[BLOCK_SIZE * 6];
 	__shared__ float collected_origin[BLOCK_SIZE * 3];
 	__shared__ float3 collected_normal[BLOCK_SIZE];
-	// __shared__ float collected_normal[BLOCK_SIZE * 3];
 
 	// Initialize helper variables
 	float T = 1.0f;
@@ -507,8 +507,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// Eq. (3) from 3D Gaussian splatting paper.
 			for (int ch = 0; ch < CHANNELS; ch++)
 				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
-			weight += alpha * T;
 
+			
 			float3 normal_i = collected_normal[j];
 			// all normals are toward the camera
 			if ((normal_i.x * ray_dir.x + normal_i.y * ray_dir.y + normal_i.z * ray_dir.z) > 0)
@@ -518,6 +518,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				normal_i.z = -normal_i.z;
 			}
 
+
 			if (T >= 0.5f)
 			{
 				D = intersect_c.z;
@@ -525,14 +526,21 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				
 				normal_intersect = normal_i;
 				
+				if (glm::abs(collected_normal[j].x * collected_normal[j].x + collected_normal[j].y * collected_normal[j].y + collected_normal[j].z * collected_normal[j].z - 1) > 0.0001f)
+				{
+					printf("load normal wrong\n");
+				}
+				
 			}
-
+			
+			weight += alpha * T;
 
 			ndc_m = z2ndc(intersect_c.z);
 			omega = alpha * T;
 
+#ifdef Ld
 			thread_Ld += omega * (ndc_m* ndc_m * P_acc - 2 * ndc_m * Q_acc + Q2Q_acc);
-
+#endif
 
 			P_acc += omega;
 			Q_acc += omega * ndc_m;
@@ -563,6 +571,14 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
 		out_alpha[pix_id] = weight; // 1 - T;
 		out_depth[pix_id] = D;// / P_acc;
+#ifdef Ld
+		// uncomment the line below to add normalization to transimitance
+		// will up weight the pixels that are not opaque
+		// note: has minimal improvement on reconstruction, 
+		// but has know issue of cause missing patches (area with no gaussians) for certain views (reason unknown)
+		// thread_Ld /= (1 - T) * (1 - T) + 1e-7;
+		out_distortion[pix_id] = thread_Ld;
+#endif
 		// store normal like RGB, out_normal size: C*H*W, C = 3
 		
 		out_normal[0 * H * W + pix_id] = normal_blend.x / P_acc;
@@ -613,6 +629,7 @@ void FORWARD::render(
 	float *out_color,
 	float *out_depth,
 	float *out_normal,
+	float *out_distortion,
 	float *ray_P,
 	float *ray_Q,
 	float *ray_Q2Q,
@@ -640,6 +657,7 @@ void FORWARD::render(
 		out_color,
 		out_depth,
 		out_normal,
+		out_distortion,
 		ray_P,
 		ray_Q,
 		ray_Q2Q,
