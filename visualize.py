@@ -54,6 +54,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     torch.save(colors, f'test_new/{name}/data/colors.pt')
     torch.save(poses, f'test_new/{name}/data/poses.pt')
     torch.save(K, f'test_new/{name}/data/K.pt')
+    # torch.save(gt, f'test_new/{name}/data/gt.pt')
     mesh_extraction(depths, colors, K, poses)
 
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool):
@@ -81,8 +82,6 @@ def get_K(render_pkg,view,idx):
     return: torch.Tensor, shape (4, 4)
     '''
     rendering = render_pkg["render"]
-    depth= render_pkg["depth"]
-    scale=view.scale
     H,W=rendering.shape[1:]
     # camera intrinsic
     fx=fov2focal(view.FoVx, W)
@@ -157,10 +156,10 @@ def mesh_extraction(depths, colors, K, RTs):
 
     """
     # Voxel size used in TSDF fusion.
-    voxel_length = 0.006
+    voxel_length = 0.004
     # Truncation threshold for TSDF.
-    sdf_trunc = 0.05
-    depth_trunc = 5.5
+    sdf_trunc = 0.02
+    depth_trunc = 4.5
     # Initialize a TSDF volume
     tsdf_volume = o3d.pipelines.integration.ScalableTSDFVolume(
         voxel_length=voxel_length,
@@ -196,19 +195,41 @@ def mesh_extraction(depths, colors, K, RTs):
     # Extract the mesh from the TSDF volume
     mesh = tsdf_volume.extract_triangle_mesh()
     # Compute vertex normals to improve rendering
-    mesh.compute_vertex_normals()
+    # mesh.compute_vertex_normals()
     # mesh_simplfied = mesh.simplify_quadric_decimation(target_number_of_triangles =65345254//10)
     # print(f'Simplified mesh has {len(mesh_simplfied.vertices)} vertices and {len(mesh_simplfied.triangles)} triangles')
-    # mesh_simplfied = mesh.simplify_quadric_decimation(target_number_of_triangles =65345254//2)
-    # print(f'Simplified mesh has {len(mesh_simplfied.vertices)} vertices and {len(mesh_simplfied.triangles)} triangles')
-    print(f'Original mesh has {len(mesh.vertices)} vertices and {len(mesh.triangles)} trianglpes')
 
-    mesh_simplfied = mesh.simplify_quadric_decimation(target_number_of_triangles =42715716//20)
-    # print(f'Simplified mesh has {len(mesh_simplfied.vertices)} vertices and {len(mesh_simplfied.triangles)} triangles')
     # Save the mesh to a file
-    name="2"
-    o3d.io.write_triangle_mesh(f"test_new/{name}/mesh_result/mesh_voxel_{voxel_length}_sdf_trunc_{sdf_trunc}_dpepth_trunc_{depth_trunc}.ply", mesh_simplfied, write_ascii=False, write_vertex_colors=False)
+    name="3"
+    o3d.io.write_triangle_mesh(f"test_new/{name}/mesh_result/mesh_voxel_{voxel_length}_sdf_trunc_{sdf_trunc}_dpepth_trunc_{depth_trunc}.ply", mesh, write_ascii=False, write_vertex_colors=False)
+    
+    new_mesh=post_process_mesh(mesh, cluster_to_keep=1000)
+    o3d.io.write_triangle_mesh(f"test_new/{name}/mesh_result/mesh_voxel_{voxel_length}_sdf_trunc_{sdf_trunc}_dpepth_trunc_{depth_trunc}_post.ply", new_mesh, write_ascii=False, write_vertex_colors=False)
     pass
+
+
+def post_process_mesh(mesh, cluster_to_keep=1000):
+    """
+    Post-process a mesh to filter out floaters and disconnected parts
+    """
+    import copy
+    print("post processing the mesh to have {} clusterscluster_to_kep".format(cluster_to_keep))
+    mesh_0 = copy.deepcopy(mesh)
+    with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Debug) as cm:
+            triangle_clusters, cluster_n_triangles, cluster_area = (mesh_0.cluster_connected_triangles())
+
+    triangle_clusters = np.asarray(triangle_clusters)
+    cluster_n_triangles = np.asarray(cluster_n_triangles)
+    cluster_area = np.asarray(cluster_area)
+    n_cluster = np.sort(cluster_n_triangles.copy())[-cluster_to_keep]
+    n_cluster = max(n_cluster, 50) # filter meshes smaller than 50
+    triangles_to_remove = cluster_n_triangles[triangle_clusters] < n_cluster
+    mesh_0.remove_triangles_by_mask(triangles_to_remove)
+    mesh_0.remove_unreferenced_vertices()
+    mesh_0.remove_degenerate_triangles()
+    print("num vertices raw {}".format(len(mesh.vertices)))
+    print("num vertices post {}".format(len(mesh_0.vertices)))
+    return mesh_0
 
 
 def simplify_mesh(file_name, mesh, n):
@@ -234,7 +255,7 @@ if __name__ == "__main__":
     load=True
     if load:
         # visualize()
-        name="2"
+        name="3"
         depths=torch.load(f'test_new/{name}/data/depths.pt')
         poses=torch.load(f'test_new/{name}/data/poses.pt')
         colors=torch.load(f'test_new/{name}/data/colors.pt')
