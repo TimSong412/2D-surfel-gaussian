@@ -160,7 +160,19 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         
         if torch.isnan(Ln):
             print("Nan Loss")
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + 0.05 * Ln + 100 * Ld
+
+        if iteration < 3000:
+            Ld_weight = 0.0
+        else:
+            Ld_weight = 100
+        
+        if iteration < 7000:
+            Ln_weight = 0.0
+        else:
+            Ln_weight = 0.05
+
+        
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + Ln_weight * Ln + Ld_weight * Ld
         loss.backward()
 
         # gradient clipping
@@ -178,7 +190,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 progress_bar.close()
 
             # Log and save
-            training_report(tb_writer, iteration, Ll1, Ln, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), Ld_value, gradnorm)
+            training_report(tb_writer, iteration, Ll1, Ln, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), Ld, gradnorm)
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)

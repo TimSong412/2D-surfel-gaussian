@@ -14,6 +14,8 @@ We are still debugging!
 
 240505: Add edge-aware distortion.
 
+240511: Add precedure regularization weight and different Ln
+
 ## Acknowledgements
 This project is built upon [3DGS](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/).
 

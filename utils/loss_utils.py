@@ -110,7 +110,7 @@ def normal_loss_2DGS(P, M, depth, view):
     normal, xyz = depth_to_normal(view, depth)
     normal = normal.permute(2, 0, 1)
     xyz = xyz.permute(2, 0, 1)
-    return (P - (M * normal).sum(dim=0, keepdim=True)).mean(), normal, (P - (M * normal).sum(dim=0, keepdim=True))/2.0
+    return (1 - (M * normal).sum(dim=0, keepdim=True)).mean(), normal, (1 - (M * normal).sum(dim=0, keepdim=True))/2.0
 
 
 
