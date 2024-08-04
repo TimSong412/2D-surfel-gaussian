@@ -527,7 +527,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			T = T / (1.f - alpha);
 			const float dchannel_dcolor = alpha * T;
-			const float dpixel_depth_ddepth = alpha * T;
+			const float dpixel_depth_ddepth = alpha * T / ray_P[pix_id];
 
 			// Propagate gradients to per-Gaussian colors and keep
 			// gradients w.r.t. alpha (blending factor for a Gaussian/pixel
@@ -550,10 +550,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			}
 
 			// Propagate gradients from pixel depth to opacity
-			// const float c_d = collected_depths[j];
-			// accum_depth_rec = last_alpha * last_depth + (1.f - last_alpha) * accum_depth_rec;
-			// last_depth = c_d;
-			// dL_dopa += (c_d - accum_depth_rec) * dL_dpixel_depth;
+			const float c_d = collected_depths[j];
+			accum_depth_rec = last_alpha * last_depth + (1.f - last_alpha) * accum_depth_rec;
+			last_depth = c_d;
+			dL_dopa += (c_d - accum_depth_rec) * dL_dpixel_depth;
 			// atomicAdd(&(dL_ddepths[global_id]), dpixel_depth_ddepth * dL_dpixel_depth);
 
 			// Propagate gradients from pixel alpha (weights_sum) to opacity
@@ -599,6 +599,10 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			glm::mat3 dL_dA_local = glm::mat3(0.0f);
 			glm::vec4 q = collected_rotation[j]; // / glm::length(rot);
 
+			float3 dL_dmeans3D_local = {0.0f, 0.0f, 0.0f};
+			float2 dL_dscale_local = {0.0f, 0.0f};
+			float4 dL_drot_local = {0.0f, 0.0f, 0.0f, 0.0f};
+
 			float r = q.x;
 			float x = q.y;
 			float y = q.z;
@@ -613,29 +617,30 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			Q2Q_acc -= omega * ndc_m * ndc_m;
 
 #ifdef LdOrLn
-		// dz/dp
-		// viewmatrix[2, 0], coloumn major
-		const float dz_dp0 = viewmatrix[2];
-		const float dz_dp1 = viewmatrix[6];
-		const float dz_dp2 = viewmatrix[10];
-		// dz/du dz/dv
-		const float dz_du = collected_STuv[j * 6 + 0] * viewmatrix[2] + collected_STuv[j * 6 + 1] * viewmatrix[6] + collected_STuv[j * 6 + 2] * viewmatrix[10];
-		const float	dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[2] + collected_STuv[j * 6 + 4] * viewmatrix[6] + collected_STuv[j * 6 + 5] * viewmatrix[10];
-		// dz/dtu dz/dtv
-		const float	dz_dtu0 = viewmatrix[2] * collected_scale[j].x * u;
-		const float	dz_dtu1 = viewmatrix[6] * collected_scale[j].x * u;
-		const float	dz_dtu2 = viewmatrix[10] * collected_scale[j].x * u;
-		const float	dz_dtv0 = viewmatrix[2] * collected_scale[j].y * v;
-		const float	dz_dtv1 = viewmatrix[6] * collected_scale[j].y * v;
-		const float	dz_dtv2 = viewmatrix[10] * collected_scale[j].y * v;
-		// dz/ds
-		float dz_dsu = (viewmatrix[2] * collected_STuv[j * 6 + 0] + viewmatrix[6] * collected_STuv[j * 6 + 1] + viewmatrix[10] * collected_STuv[j * 6 + 2]) * u / collected_scale[j].x; // ti =sti / s
-		float dz_dsv = (viewmatrix[2] * collected_STuv[j * 6 + 3] + viewmatrix[6] * collected_STuv[j * 6 + 4] + viewmatrix[10] * collected_STuv[j * 6 + 5]) * v / collected_scale[j].y;;
-		// for (int k = 0; k < 3; k++)
-		// {
-		// 	dz_dsu += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
-		// 	dz_dsv += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
-		// }
+			// dz/dp
+			// viewmatrix[2, 0], coloumn major
+			const float dz_dp0 = viewmatrix[2];
+			const float dz_dp1 = viewmatrix[6];
+			const float dz_dp2 = viewmatrix[10];
+			// dz/du dz/dv
+			const float dz_du = collected_STuv[j * 6 + 0] * viewmatrix[2] + collected_STuv[j * 6 + 1] * viewmatrix[6] + collected_STuv[j * 6 + 2] * viewmatrix[10];
+			const float dz_dv = collected_STuv[j * 6 + 3] * viewmatrix[2] + collected_STuv[j * 6 + 4] * viewmatrix[6] + collected_STuv[j * 6 + 5] * viewmatrix[10];
+			// dz/dtu dz/dtv
+			const float dz_dtu0 = viewmatrix[2] * collected_scale[j].x * u;
+			const float dz_dtu1 = viewmatrix[6] * collected_scale[j].x * u;
+			const float dz_dtu2 = viewmatrix[10] * collected_scale[j].x * u;
+			const float dz_dtv0 = viewmatrix[2] * collected_scale[j].y * v;
+			const float dz_dtv1 = viewmatrix[6] * collected_scale[j].y * v;
+			const float dz_dtv2 = viewmatrix[10] * collected_scale[j].y * v;
+			// dz/ds
+			float dz_dsu = (viewmatrix[2] * collected_STuv[j * 6 + 0] + viewmatrix[6] * collected_STuv[j * 6 + 1] + viewmatrix[10] * collected_STuv[j * 6 + 2]) * u / collected_scale[j].x; // ti =sti / s
+			float dz_dsv = (viewmatrix[2] * collected_STuv[j * 6 + 3] + viewmatrix[6] * collected_STuv[j * 6 + 4] + viewmatrix[10] * collected_STuv[j * 6 + 5]) * v / collected_scale[j].y;
+			;
+			// for (int k = 0; k < 3; k++)
+			// {
+			// 	dz_dsu += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k] * u / collected_scale[j].x;
+			// 	dz_dsv += viewmatrix[2 + 4 * k] * collected_STuv[j * 6 + k + 3] * v / collected_scale[j].y;
+			// }
 #endif
 
 #ifdef Ld
@@ -651,13 +656,18 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			dm_dz = 2 * far * near / ((far - near) * intersect_c.z * intersect_c.z);
 			dL_dz = dL_dm * dm_dz;
 
-			atomicAdd(&dL_dmeans3D[global_id].x, dL_dz * dz_dp0);
-			atomicAdd(&dL_dmeans3D[global_id].y, dL_dz * dz_dp1);
-			atomicAdd(&dL_dmeans3D[global_id].z, dL_dz * dz_dp2);
+			// atomicAdd(&dL_dmeans3D[global_id].x, dL_dz * dz_dp0);
+			// atomicAdd(&dL_dmeans3D[global_id].y, dL_dz * dz_dp1);
+			// atomicAdd(&dL_dmeans3D[global_id].z, dL_dz * dz_dp2);
+			dL_dmeans3D_local.x += dL_dz * dz_dp0;
+			dL_dmeans3D_local.y += dL_dz * dz_dp1;
+			dL_dmeans3D_local.z += dL_dz * dz_dp2;
 
 			// dz/ds
-			atomicAdd(&dL_dscale[global_id].x, dL_dz * dz_dsu);
-			atomicAdd(&dL_dscale[global_id].y, dL_dz * dz_dsv);
+			// atomicAdd(&dL_dscale[global_id].x, dL_dz * dz_dsu);
+			// atomicAdd(&dL_dscale[global_id].y, dL_dz * dz_dsv);
+			dL_dscale_local.x += dL_dz * dz_dsu;
+			dL_dscale_local.y += dL_dz * dz_dsv;
 
 			// dz/dt
 
@@ -674,10 +684,14 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			float dLd_dy = 2.0f * (x * (dLd_dtu1 + dLd_dtv0) - r * dLd_dtu2 + z * dLd_dtv2 - 2.0f * y * dLd_dtu0);
 			float dLd_dz = 2.0f * (r * (dLd_dtu1 - dLd_dtv0) + x * dLd_dtu2 + y * dLd_dtv2 - 2.0f * z * (dLd_dtu0 + dLd_dtv1));
 
-			atomicAdd(&dL_drot[global_id].x, dLd_dr);
-			atomicAdd(&dL_drot[global_id].y, dLd_dx);
-			atomicAdd(&dL_drot[global_id].z, dLd_dy);
-			atomicAdd(&dL_drot[global_id].w, dLd_dz);
+			// atomicAdd(&dL_drot[global_id].x, dLd_dr);
+			// atomicAdd(&dL_drot[global_id].y, dLd_dx);
+			// atomicAdd(&dL_drot[global_id].z, dLd_dy);
+			// atomicAdd(&dL_drot[global_id].w, dLd_dz);
+			dL_drot_local.x += dLd_dr;
+			dL_drot_local.y += dLd_dx;
+			dL_drot_local.z += dLd_dy;
+			dL_drot_local.w += dLd_dz;
 
 			// dL/dA
 			/*
@@ -717,34 +731,46 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			const float dL_dn0 = dL_drayM[0] * omega * (reverse ? -1.f : 1.f);
 			const float dL_dn1 = dL_drayM[1] * omega * (reverse ? -1.f : 1.f);
 			const float dL_dn2 = dL_drayM[2] * omega * (reverse ? -1.f : 1.f);
-			
+
 			// dL_dnw = R^T * dL_dn
 			const float dL_dnw0 = viewmatrix[0] * dL_dn0 + viewmatrix[1] * dL_dn1 + viewmatrix[2] * dL_dn2;
 			const float dL_dnw1 = viewmatrix[4] * dL_dn0 + viewmatrix[5] * dL_dn1 + viewmatrix[6] * dL_dn2;
 			const float dL_dnw2 = viewmatrix[8] * dL_dn0 + viewmatrix[9] * dL_dn1 + viewmatrix[10] * dL_dn2;
-			
+
 			float dLn_dx = 2.f * (dL_dnw0 * z - dL_dnw1 * r - 2.f * x * dL_dnw2);
 			float dLn_dy = 2.f * (dL_dnw0 * r + dL_dnw1 * z - 2.f * y * dL_dnw2);
 			float dLn_dz = 2.f * (dL_dnw0 * x + dL_dnw1 * y);
 			float dLn_dr = 2.f * (dL_dnw0 * y - dL_dnw1 * x);
 
-			atomicAdd(&dL_drot[global_id].x, dLn_dr);
-			atomicAdd(&dL_drot[global_id].y, dLn_dx);
-			atomicAdd(&dL_drot[global_id].z, dLn_dy);
-			atomicAdd(&dL_drot[global_id].w, dLn_dz);
+			// atomicAdd(&dL_drot[global_id].x, dLn_dr);
+			// atomicAdd(&dL_drot[global_id].y, dLn_dx);
+			// atomicAdd(&dL_drot[global_id].z, dLn_dy);
+			// atomicAdd(&dL_drot[global_id].w, dLn_dz);
+			dL_drot_local.x += dLn_dr;
+			dL_drot_local.y += dLn_dx;
+			dL_drot_local.z += dLn_dy;
+			dL_drot_local.w += dLn_dz;
 
-			
-			if (contributor == depth_contrib[pix_id]) {
+#ifndef BLEND_DEPTH
+			if (contributor == depth_contrib[pix_id])
+			{
+				const float dL_ddepth = dL_dpixel_depth;
+#endif
 
-				const float dL_ddepth = dL_dpixel_depths[pix_id];
+				const float dL_ddepth = dL_dpixel_depth * dpixel_depth_ddepth;
 
 				// dL/dp
-				atomicAdd(&dL_dmeans3D[global_id].x, dL_ddepth * dz_dp0);
-				atomicAdd(&dL_dmeans3D[global_id].y, dL_ddepth * dz_dp1);
-				atomicAdd(&dL_dmeans3D[global_id].z, dL_ddepth * dz_dp2);
+				// atomicAdd(&dL_dmeans3D[global_id].x, dL_ddepth * dz_dp0);
+				// atomicAdd(&dL_dmeans3D[global_id].y, dL_ddepth * dz_dp1);
+				// atomicAdd(&dL_dmeans3D[global_id].z, dL_ddepth * dz_dp2);
+				dL_dmeans3D_local.x += dL_ddepth * dz_dp0;
+				dL_dmeans3D_local.y += dL_ddepth * dz_dp1;
+				dL_dmeans3D_local.z += dL_ddepth * dz_dp2;
 
-				atomicAdd(&dL_dscale[global_id].x, dL_ddepth * dz_dsu);
-				atomicAdd(&dL_dscale[global_id].y, dL_ddepth * dz_dsv);
+				// atomicAdd(&dL_dscale[global_id].x, dL_ddepth * dz_dsu);
+				// atomicAdd(&dL_dscale[global_id].y, dL_ddepth * dz_dsv);
+				dL_dscale_local.x += dL_ddepth * dz_dsu;
+				dL_dscale_local.y += dL_ddepth * dz_dsv;
 
 				const float dLn_dtu0 = dL_ddepth * dz_dtu0;
 				const float dLn_dtu1 = dL_ddepth * dz_dtu1;
@@ -759,10 +785,14 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				dLn_dy = 2.0f * (x * (dLn_dtu1 + dLn_dtv0) - r * dLn_dtu2 + z * dLn_dtv2 - 2.0f * y * dLn_dtu0);
 				dLn_dz = 2.0f * (r * (dLn_dtu1 - dLn_dtv0) + x * dLn_dtu2 + y * dLn_dtv2 - 2.0f * z * (dLn_dtu0 + dLn_dtv1));
 
-				atomicAdd(&dL_drot[global_id].x, dLn_dr);
-				atomicAdd(&dL_drot[global_id].y, dLn_dx);
-				atomicAdd(&dL_drot[global_id].z, dLn_dy);
-				atomicAdd(&dL_drot[global_id].w, dLn_dz);
+				// atomicAdd(&dL_drot[global_id].x, dLn_dr);
+				// atomicAdd(&dL_drot[global_id].y, dLn_dx);
+				// atomicAdd(&dL_drot[global_id].z, dLn_dy);
+				// atomicAdd(&dL_drot[global_id].w, dLn_dz);
+				dL_drot_local.x += dLn_dr;
+				dL_drot_local.y += dLn_dx;
+				dL_drot_local.z += dLn_dy;
+				dL_drot_local.w += dLn_dz;
 
 				dL_dA_local[0][0] += dL_ddepth * (dz_du * (-du_dhu1) + dz_dv * (-dv_dhu1));
 				dL_dA_local[0][1] += dL_ddepth * (dz_du * (-du_dhv1) + dz_dv * (-dv_dhv1));
@@ -774,12 +804,11 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				dL_dA_local[2][1] += dL_ddepth * (dz_du * (-du_dhv3) + dz_dv * (-dv_dhv3));
 				dL_dA_local[2][2] += dL_ddepth * (dz_du * (du_dhu3 * pix_cam.x + du_dhv3 * pix_cam.y) + dz_dv * (dv_dhu3 * pix_cam.x + dv_dhv3 * pix_cam.y));
 
+#ifndef BLEND_DEPTH
 			}
-
-
-
 #endif
 
+#endif
 			// Margin cases
 			// dL_dpx = dL_dG * dG_dpx, dL_dG = con_o.w * dL_dopa
 			const float dL_dpx_margin = (G_xc > G_u) ? (con_o.w * dL_dopa * 2 * G_hat * d.x * focal_x) : 0.f;
@@ -815,6 +844,22 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			// Update gradients w.r.t. opacity of the Gaussian
 			atomicAdd(&(dL_dopacity[global_id]), G_hat * dL_dopa);
 
+
+
+			atomicAdd(&dL_dmeans3D[global_id].x, dL_dmeans3D_local.x);
+			atomicAdd(&dL_dmeans3D[global_id].y, dL_dmeans3D_local.y);
+			atomicAdd(&dL_dmeans3D[global_id].z, dL_dmeans3D_local.z);
+
+			atomicAdd(&dL_dscale[global_id].x, dL_dscale_local.x);
+			atomicAdd(&dL_dscale[global_id].y, dL_dscale_local.y);
+
+			atomicAdd(&dL_drot[global_id].x, dL_drot_local.x);
+			atomicAdd(&dL_drot[global_id].y, dL_drot_local.y);
+			atomicAdd(&dL_drot[global_id].z, dL_drot_local.z);
+			atomicAdd(&dL_drot[global_id].w, dL_drot_local.w);
+
+
+
 			// dL_dA: N*9 array
 			atomicAdd(&(dL_dA[global_id * 9 + 0]), dL_dA_local[0][0]);
 			atomicAdd(&(dL_dA[global_id * 9 + 1]), dL_dA_local[0][1]);
@@ -827,7 +872,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			atomicAdd(&(dL_dA[global_id * 9 + 8]), dL_dA_local[2][2]);
 		}
 	}
-	
+
 	atomicAdd(Ld_value, thread_Ld);
 }
 
