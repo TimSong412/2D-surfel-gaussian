@@ -16,6 +16,8 @@ We are still debugging!
 
 240511: Add precedure regularization weight and different Ln
 
+240804: Use Blending mean depth, detach depth gradient in Ln
+
 ## Acknowledgements
 This project is built upon [3DGS](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/).
 
