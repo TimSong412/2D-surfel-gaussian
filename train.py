@@ -164,7 +164,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if iteration < 3000:
             Ld_weight = 0.0
         else:
-            Ld_weight = 500.0
+            Ld_weight = 100.0
         
         if iteration < 7000:
             Ln_weight = 0.0

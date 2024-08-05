@@ -107,10 +107,10 @@ def normal_loss_2DGS(P, M, depth, view):
     xyz_ = torch.stack([x*depth.squeeze(), y*depth.squeeze(), depth.squeeze()])
     _, dPy, dPx = torch.gradient(xyz_)
 
-    normal, xyz = depth_to_normal(view, depth)
+    normal, xyz = depth_to_normal(view, depth.clone().detach())
     normal = normal.permute(2, 0, 1)
     xyz = xyz.permute(2, 0, 1)
-    return (1 - (M * normal).sum(dim=0, keepdim=True)).mean(), normal, (1 - (M * normal).sum(dim=0, keepdim=True))/2.0
+    return (P - (M * normal).sum(dim=0, keepdim=True)).mean(), normal, (P - (M * normal).sum(dim=0, keepdim=True))/2.0
 
 
 
