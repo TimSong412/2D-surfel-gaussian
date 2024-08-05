@@ -333,7 +333,6 @@ __global__ void preprocessCUDA(int P, int D, int M,
 	conic_opacity[idx] = {conic.x, conic.y, conic.z, opacities[idx]};
 	tiles_touched[idx] = (rect_max.y - rect_min.y) * (rect_max.x - rect_min.x);
 	normals[idx] = normal;
-
 }
 
 // Main rasterization method. Collaboratively works on one tile per
@@ -408,7 +407,8 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 	uint32_t depth_contributor = 0;
 	float C[CHANNELS] = {0};
 	float weight = 0;
-	float D = 0;
+	float D = 0.0f;
+	float blend_D = 0.0f;
 	float3 intersect_w;
 	float3 intersect_c;
 	float3 normal_intersect;
@@ -508,7 +508,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			for (int ch = 0; ch < CHANNELS; ch++)
 				C[ch] += features[collected_id[j] * CHANNELS + ch] * alpha * T;
 
-			
 			float3 normal_i = collected_normal[j];
 			// all normals are toward the camera
 			if ((normal_i.x * ray_dir.x + normal_i.y * ray_dir.y + normal_i.z * ray_dir.z) > 0)
@@ -517,29 +516,31 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 				normal_i.y = -normal_i.y;
 				normal_i.z = -normal_i.z;
 			}
-
-
+#ifndef BLEND_DEPTH
 			if (T >= 0.5f)
 			{
+
 				D = intersect_c.z;
-				depth_contributor = last_contributor; // last_contributor, to match the backward 
-				
+
+				depth_contributor = last_contributor; // last_contributor, to match the backward
+
 				normal_intersect = normal_i;
-				
+
 				if (glm::abs(collected_normal[j].x * collected_normal[j].x + collected_normal[j].y * collected_normal[j].y + collected_normal[j].z * collected_normal[j].z - 1) > 0.0001f)
 				{
 					printf("load normal wrong\n");
 				}
-				
 			}
-			
+#endif
 			weight += alpha * T;
 
 			ndc_m = z2ndc(intersect_c.z);
 			omega = alpha * T;
 
+			blend_D += omega * intersect_c.z;
+
 #ifdef Ld
-			thread_Ld += omega * (ndc_m* ndc_m * P_acc - 2 * ndc_m * Q_acc + Q2Q_acc);
+			thread_Ld += omega * (ndc_m * ndc_m * P_acc - 2 * ndc_m * Q_acc + Q2Q_acc);
 #endif
 
 			P_acc += omega;
@@ -549,7 +550,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			M_acc.y += omega * normal_i.y;
 			M_acc.z += omega * normal_i.z;
 
-			
 			normal_blend.x += omega * normal_i.x;
 			normal_blend.y += omega * normal_i.y;
 			normal_blend.z += omega * normal_i.z;
@@ -570,17 +570,22 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		for (int ch = 0; ch < CHANNELS; ch++)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
 		out_alpha[pix_id] = weight; // 1 - T;
-		out_depth[pix_id] = D;// / P_acc;
+#ifdef BLEND_DEPTH
+		out_depth[pix_id] = blend_D / P_acc;
+#else
+		out_depth[pix_id] = D; // / P_acc;
+#endif
+
 #ifdef Ld
 		// uncomment the line below to add normalization to transimitance
 		// will up weight the pixels that are not opaque
-		// note: has minimal improvement on reconstruction, 
+		// note: has minimal improvement on reconstruction,
 		// but has know issue of cause missing patches (area with no gaussians) for certain views (reason unknown)
 		// thread_Ld /= (1 - T) * (1 - T) + 1e-7;
 		out_distortion[pix_id] = thread_Ld;
 #endif
 		// store normal like RGB, out_normal size: C*H*W, C = 3
-		
+
 		out_normal[0 * H * W + pix_id] = normal_blend.x / P_acc;
 		out_normal[1 * H * W + pix_id] = normal_blend.y / P_acc;
 		out_normal[2 * H * W + pix_id] = normal_blend.z / P_acc;
@@ -603,7 +608,6 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 		ray_M[2 * H * W + pix_id] = M_acc.z;		
 
 	}
-	
 }
 
 void FORWARD::render(

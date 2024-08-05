@@ -16,6 +16,8 @@
 #define BLOCK_X 16
 #define BLOCK_Y 16
 
+#define BLEND_DEPTH
+
 #define Ld
 #define far 1000.0f
 #define near 0.2f
