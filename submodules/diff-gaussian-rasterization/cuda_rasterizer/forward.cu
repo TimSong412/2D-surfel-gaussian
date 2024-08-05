@@ -571,7 +571,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 			out_color[ch * H * W + pix_id] = C[ch] + T * bg_color[ch];
 		out_alpha[pix_id] = weight; // 1 - T;
 #ifdef BLEND_DEPTH
-		out_depth[pix_id] = blend_D / P_acc;
+		out_depth[pix_id] = blend_D; // / P_acc; Do normalization by Python
 #else
 		out_depth[pix_id] = D; // / P_acc;
 #endif
