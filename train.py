@@ -147,15 +147,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         render_pkg = render(viewpoint_cam, gaussians, pipe, bg, Ld_value=Ld_value)
         image, viewspace_point_tensor, visibility_filter, radii, depth, distortion, ray_P, ray_M, blend_normal = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["depth"], render_pkg["distortion"], render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["normal"]
-        ray_P.retain_grad()
-        ray_M.retain_grad()
-        depth.retain_grad()
         
         Ll1 = l1_loss(image, gt_image)
-        newdepth = torch.clamp(depth, 0.1)
-        newdepth.retain_grad()
+        
 
-        Ln, depth_norm, loss_map = normal_loss_2DGS(ray_P, ray_M, newdepth, viewpoint_cam)
+        Ln, depth_norm, loss_map = normal_loss_2DGS(ray_P, ray_M, depth, viewpoint_cam)
         Ld = (distortion * gt_exp_neg_grad).mean()
         
         if torch.isnan(Ln):
