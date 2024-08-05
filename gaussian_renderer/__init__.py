@@ -96,6 +96,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         cov3D_precomp = cov3D_precomp)
     
     depth /= ray_P # normalize depth
+    depth = torch.nan_to_num(depth, nan=0.0, posinf=0.0, neginf=0.0)
 
     # Those Gaussians that were frustum culled or had a radius of 0 were not visible.
     # They will be excluded from value updates used in the splitting criteria.
