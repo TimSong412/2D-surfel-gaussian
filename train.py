@@ -147,32 +147,41 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         render_pkg = render(viewpoint_cam, gaussians, pipe, bg, Ld_value=Ld_value)
         image, viewspace_point_tensor, visibility_filter, radii, depth, distortion, ray_P, ray_M, blend_normal = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"], render_pkg["depth"], render_pkg["distortion"], render_pkg["ray_P"], render_pkg["ray_M"], render_pkg["normal"]
-        ray_P.retain_grad()
-        ray_M.retain_grad()
-        depth.retain_grad()
         
-        Ll1 = l1_loss(image, gt_image)
-        newdepth = torch.clamp(depth, 0.1)
-        newdepth.retain_grad()
+        depth.retain_grad()
 
-        Ln, depth_norm, loss_map = normal_loss_2DGS(ray_P, ray_M, newdepth, viewpoint_cam)
+        Ll1 = l1_loss(image, gt_image)
+
+        gt_depth = viewpoint_cam.depth.cuda()
+        
+        L_depth = l1_loss(depth, gt_depth)
+        
+
+        Ln, depth_norm, loss_map = normal_loss_2DGS(ray_P, ray_M, depth, viewpoint_cam)
         Ld = (distortion * gt_exp_neg_grad).mean()
         
         if torch.isnan(Ln):
             print("Nan Loss")
 
-        if iteration < 3000:
+        if iteration < 200:
             Ld_weight = 0.0
+        elif iteration < 700:
+            Ld_weight = 50.0
         else:
             Ld_weight = 100.0
         
-        if iteration < 7000:
+        if iteration < 200:
             Ln_weight = 0.0
         else:
             Ln_weight = 0.05
 
+        if iteration < 300:
+            Ldepth_weight = 0.0
+        else:
+            Ldepth_weight = 1
+
         
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + Ln_weight * Ln + Ld_weight * Ld
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + Ln_weight * Ln + Ld_weight * Ld + L_depth * Ldepth_weight
         loss.backward()
 
         # gradient clipping
@@ -190,7 +199,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 progress_bar.close()
 
             # Log and save
-            training_report(tb_writer, iteration, Ll1, Ln, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), Ld, gradnorm)
+            training_report(tb_writer, iteration, Ll1, Ln, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), Ld, gradnorm, L_depth)
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
@@ -241,12 +250,13 @@ def prepare_output_and_logger(args):
         print("Tensorboard not available: not logging progress")
     return tb_writer
 
-def training_report(tb_writer, iteration, Ll1, Ln, loss, l1_loss, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs, Ld_value, gradnorm):
+def training_report(tb_writer, iteration, Ll1, Ln, loss, l1_loss, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs, Ld_value, gradnorm, L_depth):
     if tb_writer:
         tb_writer.add_scalar('train_loss_patches/l1_loss', Ll1.item(), iteration)
         tb_writer.add_scalar('train_loss_patches/total_loss', loss.item(), iteration)
         tb_writer.add_scalar('train_loss_patches/Ld_value', Ld_value.item(), iteration)
         tb_writer.add_scalar('train_loss_patches/norm_loss', Ln.item(), iteration)
+        tb_writer.add_scalar('train_loss_patches/depth_loss', L_depth.item(), iteration)
         tb_writer.add_scalar('iter_time', elapsed, iteration) 
         tb_writer.add_scalar('total_points', scene.gaussians.get_xyz.shape[0], iteration)
         tb_writer.add_scalar('mean_opacity', scene.gaussians.get_opacity.mean(), iteration)
@@ -314,11 +324,12 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[i*1000 for i in range(30)])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[i*500 for i in range(30)])
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[i*1000 for i in range(30)])
     parser.add_argument("--quiet", action="store_true")
-    parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[4000])
+    parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[1500])
     parser.add_argument("--start_checkpoint", type=str, default = None)
+    parser.add_argument("--depth_path", type=str, default = "depth")
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
     
@@ -328,7 +339,7 @@ if __name__ == "__main__":
     safe_state(args.quiet)
 
     # Start GUI server, configure and run training
-    network_gui.init(args.ip, args.port)
+    # network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
     training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
 

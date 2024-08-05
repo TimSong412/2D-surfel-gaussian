@@ -22,6 +22,28 @@ from pathlib import Path
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
 from scene.gaussian_model import BasicPointCloud
+import OpenEXR
+import Imath
+
+
+def read_exr(s, width, height):
+    mat = np.fromstring(s, dtype=np.float32)
+    mat = mat.reshape(height, width)
+    return mat
+
+def exr_to_numpy(exr_path, single=True):
+    exr_image = OpenEXR.InputFile(exr_path)
+    dw = exr_image.header()['dataWindow']
+    (width, height) = (dw.max.x - dw.min.x + 1, dw.max.y - dw.min.y + 1)
+
+
+    b, g, r = [read_exr(s, width, height) for s in exr_image.channels('BGR', Imath.PixelType(Imath.PixelType.FLOAT))]
+    # dmap = np.asarray(dmap,np.float64)
+
+    if single:
+        return b
+    
+    return np.stack([r, g, b], axis=0)
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -34,6 +56,7 @@ class CameraInfo(NamedTuple):
     image_name: str
     width: int
     height: int
+    depth: np.array = None
 
 class SceneInfo(NamedTuple):
     point_cloud: BasicPointCloud
@@ -65,7 +88,7 @@ def getNerfppNorm(cam_info):
 
     return {"translate": translate, "radius": radius}
 
-def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
+def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, depthdir):
     cam_infos = []
     for idx, key in enumerate(cam_extrinsics):
         sys.stdout.write('\r')
@@ -98,7 +121,11 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
         image_name = os.path.basename(image_path).split(".")[0]
         image = Image.open(image_path)
 
-        cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
+        depth = exr_to_numpy(os.path.join(depthdir, image_name + ".exr"))
+
+        depth[depth > 1e9] = 0.0
+
+        cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image, depth=depth,
                               image_path=image_path, image_name=image_name, width=width, height=height)
         cam_infos.append(cam_info)
     sys.stdout.write('\n')
@@ -142,7 +169,8 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
         cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
 
     reading_dir = "images" if images == None else images
-    cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=os.path.join(path, reading_dir))
+    depthdir = os.path.join(path, "depth")
+    cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=os.path.join(path, reading_dir), depthdir=depthdir)
     cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
 
     if eval:

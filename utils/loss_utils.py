@@ -90,22 +90,22 @@ def norm_loss(P, M, depth, fx, fy, W, H):
 
 
 def normal_loss_2DGS(P, M, depth, view):
-    W = view.image_width
-    H = view.image_height
-    fx = W / (2 * math.tan(view.FoVx / 2.))
-    fy = H / (2 * math.tan(view.FoVy / 2.))
-    cx=W/2.0
-    cy=H/2.0
+    # W = view.image_width
+    # H = view.image_height
+    # fx = W / (2 * math.tan(view.FoVx / 2.))
+    # fy = H / (2 * math.tan(view.FoVy / 2.))
+    # cx=W/2.0
+    # cy=H/2.0
 
-    x=torch.arange(W).reshape(1, -1).repeat(H, 1).to(depth.device)+0.5
-    y=torch.arange(H).reshape(-1, 1).repeat(1, W).to(depth.device)+0.5
-    x=(x-cx)/fx
-    y=(y-cy)/fy
-    view_ray = torch.stack([x, y, torch.ones_like(x)]).to(depth.device)
-    view_ray = view_ray / torch.norm(view_ray, dim=0, keepdim=True)
+    # x=torch.arange(W).reshape(1, -1).repeat(H, 1).to(depth.device)+0.5
+    # y=torch.arange(H).reshape(-1, 1).repeat(1, W).to(depth.device)+0.5
+    # x=(x-cx)/fx
+    # y=(y-cy)/fy
+    # view_ray = torch.stack([x, y, torch.ones_like(x)]).to(depth.device)
+    # view_ray = view_ray / torch.norm(view_ray, dim=0, keepdim=True)
     
-    xyz_ = torch.stack([x*depth.squeeze(), y*depth.squeeze(), depth.squeeze()])
-    _, dPy, dPx = torch.gradient(xyz_)
+    # xyz_ = torch.stack([x*depth.squeeze(), y*depth.squeeze(), depth.squeeze()])
+    # _, dPy, dPx = torch.gradient(xyz_)
 
     normal, xyz = depth_to_normal(view, depth.clone().detach())
     normal = normal.permute(2, 0, 1)
