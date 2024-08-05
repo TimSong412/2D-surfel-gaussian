@@ -527,7 +527,7 @@ __global__ void __launch_bounds__(BLOCK_X *BLOCK_Y)
 
 			T = T / (1.f - alpha);
 			const float dchannel_dcolor = alpha * T;
-			const float dpixel_depth_ddepth = alpha * T / ray_P[pix_id];
+			const float dpixel_depth_ddepth = alpha * T; // / ray_P[pix_id]; normalized by Python, no need to normalize here. The gradient contribution of this gaussian among the ray.
 
 			// Propagate gradients to per-Gaussian colors and keep
 			// gradients w.r.t. alpha (blending factor for a Gaussian/pixel
